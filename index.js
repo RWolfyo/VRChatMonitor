@@ -9,7 +9,9 @@ const API = "https://api.vrchat.cloud/api/1";
 const debugLogFile = path.resolve("./debug.log");
 
 const config = JSON.parse(fs.readFileSync("config.json", "utf-8"));
-const blockedGroups = parse(fs.readFileSync("blockedGroups.jsonc", "utf-8")).blockedGroups;
+const blockedGroups = parse(
+  fs.readFileSync("blockedGroups.jsonc", "utf-8")
+).blockedGroups;
 const { discordWebhook, debug } = config;
 
 let authHeaders = {};
