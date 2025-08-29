@@ -1,0 +1,12 @@
+{
+  "blockedGroups": [
+    "grp_9db8838d-80c7-46d5-8a8f-75ab6028fb75", // Example Group Name A
+    "grp_74ffdb3a-ef08-4434-8268-e29e7e6eb0dc", // Example Group Name B
+    "grp_ee831cbf-e480-4616-8639-90a71f09fbc7", // Example Group Name C
+    "grp_97295c68-6def-4e5f-a892-2a258e0fb829", // Example Group Name D
+    "grp_5af50429-cc56-40cf-8b98-cc7dac69fbcb", // Example Group Name E
+    "grp_348dd9de-c039-4f5d-8321-ae8bbc616872", // Example Group Name F
+    "grp_e997ff8c-2a06-4c43-951f-f55ebe28b9d8", // Example Group Name G
+    "grp_425ae4ab-039e-4461-8fb7-3fad0bacc485" // Example Group Name H
+  ]
+}

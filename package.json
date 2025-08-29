@@ -2,8 +2,9 @@
   "name": "vrc-monitor",
   "type": "module",
   "dependencies": {
+    "jsonc-parser": "^3.3.1",
     "node-fetch": "^3.3.2",
     "node-notifier": "^10.0.1",
-    "readline-sync": "^1.4.10",
+    "readline-sync": "^1.4.10"
   }
 }
