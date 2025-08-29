@@ -349,9 +349,9 @@ async function processPlayerJoin(userId, displayName) {
       const alertMsg = `${displayName || userId} is in blocked group: ${
         match.name || match.groupId
       }`;
-      console.log(`⚠️ ALERT: ${alertMsg}`);
+      console.log(`⚠️ ALERT: ${alertMsg} (${userId})`);
       windowsNotify(alertMsg);
-      discordNotify(alertMsg);
+      discordNotify(alertMsg + ` (${userId})`);
       logDebug("Blocked group match for", userId, match);
     } else {
       logDebug("No blocked groups for", userId);
