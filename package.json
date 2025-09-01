@@ -1,10 +1,19 @@
 {
   "name": "vrc-monitor",
+  "version": "0.1.0",
   "type": "module",
+  "bin": "index.js",
+  "scripts": {
+    "build": "pkg index.js --targets node18-win-x64 --output dist/vrc-monitor.exe",
+    "lint": "echo \"no lint configured\""
+  },
   "dependencies": {
     "jsonc-parser": "^3.3.1",
     "node-fetch": "^3.3.2",
     "node-notifier": "^10.0.1",
     "readline-sync": "^1.4.10"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.0"
   }
 }

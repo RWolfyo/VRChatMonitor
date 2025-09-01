@@ -1,0 +1,49 @@
+name: Build & Release (Windows x64)
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: Build Windows x64 EXE and create release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build exe (pkg)
+        run: |
+          echo "Building vrc-monitor for Windows x64..."
+          npm run build
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: build-${{ github.run_number }}-${{ github.sha }}
+          release_name: vrc-monitor build #${{ github.run_number }} - ${{ github.sha }}
+          body: Automated build for commit ${{ github.sha }} (run ${{ github.run_number }})
+          draft: false
+          prerelease: false
+
+      - name: Upload release asset (exe)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: dist/vrc-monitor.exe
+          asset_name: vrc-monitor-windows-x64.exe
+          asset_content_type: application/octet-stream
