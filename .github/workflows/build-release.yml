@@ -26,6 +26,34 @@ jobs:
           echo "Building vrc-monitor for Windows x64..."
           npm run build
 
+      - name: Package build into ZIP
+        shell: pwsh
+        run: |
+          Write-Host "Preparing release directory..."
+          $releaseDir = "release-artifact"
+          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+
+          Write-Host "Copying exe and common files..."
+          Copy-Item -Path "dist\vrc-monitor.exe" -Destination $releaseDir -Force
+          Copy-Item -Path "LICENSE" -Destination $releaseDir -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "README.md" -Destination $releaseDir -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "config.json" -Destination $releaseDir -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "blockedGroups.jsonc" -Destination $releaseDir -Force -ErrorAction SilentlyContinue
+          
+          Write-Host "Including node-notifier vendor executables (if present)..."
+          if (Test-Path "node_modules\node-notifier\vendor") {
+            New-Item -ItemType Directory -Path "$releaseDir\vendor" -Force | Out-Null
+            Copy-Item -Path "node_modules\node-notifier\vendor\*" -Destination "$releaseDir\vendor" -Recurse -Force -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "node-notifier vendor directory not found; skipping"
+          }
+
+          Write-Host "Creating ZIP archive..."
+          $zipPath = "dist\vrc-monitor-windows-x64.zip"
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          Compress-Archive -Path "$releaseDir\*" -DestinationPath $zipPath -Force
+          Write-Host "Zip created at $zipPath"
+
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
@@ -37,6 +65,16 @@ jobs:
           body: Automated build for commit ${{ github.sha }} (run ${{ github.run_number }})
           draft: false
           prerelease: false
+
+      - name: Upload release asset (zip)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: dist/vrc-monitor-windows-x64.zip
+          asset_name: vrc-monitor-windows-x64.zip
+          asset_content_type: application/zip
 
       - name: Upload release asset (exe)
         uses: actions/upload-release-asset@v1
