@@ -354,7 +354,6 @@ async function processPlayerJoin(userId, displayName) {
       return;
     }
 
-    // Collect all blocked-group matches (previously used find -> first match only).
     const matches = groups.filter((g) => blockedGroups.includes(g.groupId));
 
     if (matches.length > 0) {
@@ -365,7 +364,6 @@ async function processPlayerJoin(userId, displayName) {
         matches.length > 1 ? "s" : ""
       }: ${groupDescriptions.join(", ")}`;
 
-      // Single combined alert message (console + Windows + Discord)
       console.log(`⚠️ ALERT: ${alertMsg} (${userId})`);
       try {
         windowsNotify(alertMsg);
