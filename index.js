@@ -120,6 +120,8 @@ async function getCurrentUser() {
 
 // getUserGroups(): Fetch groups a user belongs to.
 async function getUserGroups(userId) {
+  if (!userId || typeof userId !== "string")
+    throw new TypeError("getUserGroups: userId must be a string");
   const url = `${API}/users/${userId}/groups`;
   logDebug("Fetching user groups:", url);
   const res = await fetch(url, { headers: authHeaders });
@@ -130,6 +132,8 @@ async function getUserGroups(userId) {
 
 // parseUserInfoFromLog(): Parse "Name (usr_xxx)" style fragments and return displayName/userId.
 function parseUserInfoFromLog(text) {
+  if (!text || typeof text !== "string")
+    return { displayName: null, userId: null };
   const pos = text.lastIndexOf(" (");
   if (pos >= 0 && text.endsWith(")")) {
     const displayName = text.substring(0, pos);
@@ -295,9 +299,8 @@ async function handleGameLogLine(line) {
       const rest = line.substring(idx + 15).trim();
       const { displayName, userId } = parseUserInfoFromLog(rest);
       logDebug("GameLog OnPlayerLeft parsed:", { displayName, userId });
-      if (userId && recentlySeenJoins.has(userId)) {
+      if (userId && recentlySeenJoins.has(userId))
         recentlySeenJoins.delete(userId);
-      }
       return;
     }
   } catch (e) {
@@ -308,6 +311,11 @@ async function handleGameLogLine(line) {
 // processPlayerJoin(): Handle a player join: dedupe, ignore self, check groups, notify on match.
 async function processPlayerJoin(userId, displayName) {
   try {
+    if (!userId || typeof userId !== "string") {
+      logDebug("processPlayerJoin called with invalid userId:", userId);
+      return;
+    }
+
     if (recentlySeenJoins.has(userId)) {
       logDebug("Duplicate join ignored for", userId);
       return;
@@ -345,15 +353,32 @@ async function processPlayerJoin(userId, displayName) {
       logDebug("No groups found for", userId);
       return;
     }
-    const match = groups.find((g) => blockedGroups.includes(g.groupId));
-    if (match) {
-      const alertMsg = `${displayName || userId} is in blocked group: ${
-        match.name || match.groupId
-      }`;
+
+    // Collect all blocked-group matches (previously used find -> first match only).
+    const matches = groups.filter((g) => blockedGroups.includes(g.groupId));
+
+    if (matches.length > 0) {
+      const groupDescriptions = matches.map(
+        (m) => `${m.name || m.groupId} (${m.groupId})`
+      );
+      const alertMsg = `${displayName || userId} is in blocked group${
+        matches.length > 1 ? "s" : ""
+      }: ${groupDescriptions.join(", ")}`;
+
+      // Single combined alert message (console + Windows + Discord)
       console.log(`⚠️ ALERT: ${alertMsg} (${userId})`);
-      windowsNotify(alertMsg);
-      discordNotify(alertMsg + ` (${userId})`);
-      logDebug("Blocked group match for", userId, match);
+      try {
+        windowsNotify(alertMsg);
+      } catch (e) {
+        logDebug("windowsNotify failed:", e && (e.stack || e.message || e));
+      }
+      try {
+        await discordNotify(`${alertMsg} (${userId})`);
+      } catch (e) {
+        logDebug("discordNotify failed:", e && (e.stack || e.message || e));
+      }
+
+      logDebug("Blocked group matches for", userId, matches);
     } else {
       logDebug("No blocked groups for", userId);
     }
@@ -363,24 +388,33 @@ async function processPlayerJoin(userId, displayName) {
 }
 
 // windowsNotify(): Send a Windows system notification.
-
 function windowsNotify(msg) {
-  notifier.notify({
-    title: "VRChat Alert",
-    message: msg,
-    sound: true,
-    wait: false,
-  });
+  try {
+    notifier.notify({
+      title: "VRChat Alert",
+      message: msg,
+      sound: true,
+      wait: false,
+    });
+  } catch (e) {
+    logDebug("windowsNotify error:", e && (e.stack || e.message || e));
+  }
 }
+
 // discordNotify(): Send a Discord webhook notification if configured.
 async function discordNotify(msg) {
   if (!discordWebhook) return;
   logDebug("Sending Discord notification:", msg);
-  await fetch(discordWebhook, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content: `⚠️ ${msg}` }),
-  });
+  try {
+    await fetch(discordWebhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: `⚠️ ${msg}` }),
+    });
+  } catch (e) {
+    logDebug("discordNotify fetch failed:", e && (e.stack || e.message || e));
+    throw e;
+  }
 }
 
 // triggerTestNotification(): Trigger a test notification (debug only) via Windows/Discord.
