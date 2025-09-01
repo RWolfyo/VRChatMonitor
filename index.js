@@ -9,10 +9,14 @@ const API = "https://api.vrchat.cloud/api/1";
 const debugLogFile = path.resolve("./debug.log");
 
 const config = JSON.parse(fs.readFileSync("config.json", "utf-8"));
-const blockedGroups = parse(
-  fs.readFileSync("blockedGroups.jsonc", "utf-8")
-).blockedGroups;
-const { discordWebhook, debug } = config;
+const {
+  discordWebhook,
+  debug,
+  blockedGroupsAutoUpdate = true,
+  blockedGroupsRemoteUrl = null,
+} = config;
+
+let blockedGroups = []; // will be populated by loadBlockedGroups()
 
 let authHeaders = {};
 let cookies = "";
@@ -431,6 +435,135 @@ async function triggerTestNotification() {
   }
 }
 
+// loadBlockedGroups(): Optionally fetch remote blockedGroups and update local file,
+async function loadBlockedGroups() {
+  try {
+    if (!blockedGroupsAutoUpdate) {
+      logDebug("blockedGroupsAutoUpdate disabled in config.");
+    } else if (!blockedGroupsRemoteUrl) {
+      logDebug(
+        "blockedGroupsRemoteUrl missing; skipping blocked groups update."
+      );
+    } else {
+      logDebug(
+        "Attempting to update blockedGroups from remote:",
+        blockedGroupsRemoteUrl
+      );
+      try {
+        const res = await fetch(blockedGroupsRemoteUrl, {
+          headers: { "User-Agent": "VRChatMonitor/1.0 (hubert@wolfyo.eu)" },
+        });
+        if (res.ok) {
+          const text = await res.text();
+          let remoteParsed;
+          try {
+            remoteParsed = parse(text);
+          } catch (e) {
+            logDebug(
+              "Failed to parse remote blockedGroups JSONC:",
+              e && e.message ? e.message : e
+            );
+            remoteParsed = null;
+          }
+          const remoteArray =
+            remoteParsed && Array.isArray(remoteParsed.blockedGroups)
+              ? remoteParsed.blockedGroups
+              : null;
+          if (remoteArray) {
+            let localText = "";
+            try {
+              localText = fs.readFileSync("blockedGroups.jsonc", "utf-8");
+            } catch (e) {
+              logDebug(
+                "Local blockedGroups.jsonc not found or unreadable:",
+                e && e.message ? e.message : e
+              );
+              localText = null;
+            }
+            let localParsed = null;
+            let localArray = [];
+            if (localText != null) {
+              try {
+                localParsed = parse(localText);
+                localArray = Array.isArray(localParsed.blockedGroups)
+                  ? localParsed.blockedGroups
+                  : [];
+              } catch (e) {
+                logDebug(
+                  "Failed to parse local blockedGroups.jsonc:",
+                  e && e.message ? e.message : e
+                );
+                localArray = [];
+              }
+            }
+            const arraysEqual = (a, b) => {
+              if (!Array.isArray(a) || !Array.isArray(b)) return false;
+              if (a.length !== b.length) return false;
+              for (let i = 0; i < a.length; i++)
+                if (a[i] !== b[i]) return false;
+              return true;
+            };
+            if (arraysEqual(remoteArray, localArray)) {
+              logDebug(
+                "Remote blockedGroups identical to local; no update needed."
+              );
+            } else {
+              try {
+                // Prefer writing the fetched text to preserve comments/formatting if available
+                fs.writeFileSync("blockedGroups.jsonc", text);
+                console.log(
+                  "💾 blockedGroups.jsonc updated from remote source."
+                );
+                logDebug(
+                  "blockedGroups.jsonc updated from",
+                  blockedGroupsRemoteUrl
+                );
+              } catch (e) {
+                logDebug(
+                  "Failed to write updated blockedGroups.jsonc:",
+                  e && (e.stack || e.message || e)
+                );
+              }
+            }
+          } else {
+            logDebug(
+              "Remote file did not contain 'blockedGroups' array; skipping update."
+            );
+          }
+        } else {
+          logDebug(
+            "Failed to fetch blockedGroups remote:",
+            res.status,
+            res.statusText
+          );
+        }
+      } catch (e) {
+        logDebug(
+          "Error fetching remote blockedGroups:",
+          e && (e.stack || e.message || e)
+        );
+      }
+    }
+  } catch (e) {
+    logDebug(
+      "Unexpected error in loadBlockedGroups:",
+      e && (e.stack || e.message || e)
+    );
+  }
+  // finally, ensure blockedGroups variable is loaded from the local file
+  try {
+    blockedGroups = parse(
+      fs.readFileSync("blockedGroups.jsonc", "utf-8")
+    ).blockedGroups;
+  } catch (e) {
+    logDebug(
+      "Failed to load local blockedGroups.jsonc into memory:",
+      e && (e.stack || e.message || e)
+    );
+    blockedGroups = [];
+  }
+}
+
 // main(): Application entrypoint that logs in, starts watchers, and enables terminal controls.
 (async () => {
   console.log("🔍 VRChat Instance Monitor Starting...");
@@ -438,6 +571,7 @@ async function triggerTestNotification() {
     debugLogFile,
     `=== Debug log started ${new Date().toISOString()} ===\n`
   );
+  await loadBlockedGroups();
   await login();
   startLogWatcher().catch((e) =>
     logDebug("startLogWatcher failed:", e && (e.stack || e.message || e))
