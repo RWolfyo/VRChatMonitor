@@ -1,4 +1,6 @@
 {
   "discordWebhook": "",
-  "debug": false
+  "debug": false,
+  "blockedGroupsAutoUpdate": true,
+  "blockedGroupsRemoteUrl": "https://raw.githubusercontent.com/RWolfyo/VRChatMonitor/refs/heads/master/blockedGroups.jsonc"
 }
