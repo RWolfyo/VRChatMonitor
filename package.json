@@ -2,16 +2,15 @@
   "name": "vrc-monitor",
   "version": "0.1.0",
   "type": "module",
-  "bin": "index.js",
+  "bin": "build/index.cjs",
   "scripts": {
-    "build:bundle": "esbuild index.js --bundle --platform=node --target=node18 --outfile=build/index.cjs --format=cjs",
+    "build:bundle": "esbuild index.js --bundle --platform=node --target=node18 --outfile=build/index.cjs --format=cjs --external:node-notifier --external:readline-sync --external:jsonc-parser",
     "build:pkg": "pkg build/index.cjs --targets node18-win-x64 --output dist/vrc-monitor.exe",
     "build": "npm run build:bundle && npm run build:pkg",
     "lint": "echo \"no lint configured\""
   },
   "dependencies": {
     "jsonc-parser": "^3.3.1",
-    "node-fetch": "^3.3.2",
     "node-notifier": "^10.0.1",
     "readline-sync": "^1.4.10"
   },
@@ -21,7 +20,12 @@
   },
   "pkg": {
     "assets": [
-      "node_modules/jsonc-parser/lib/**"
-    ]
+      "blockedGroups.jsonc",
+      "config.json",
+      "node_modules/jsonc-parser/lib/**",
+      "node_modules/node-notifier/vendor/**",
+      "node_modules/node-notifier/lib/**"
+    ],
+    "scripts": []
   }
 }

@@ -1,4 +1,4 @@
-import fetch from "node-fetch";
+const fetch = globalThis.fetch;
 import fs from "fs";
 import readlineSync from "readline-sync";
 import notifier from "node-notifier";
@@ -6,9 +6,45 @@ import path from "path";
 import { parse } from "jsonc-parser";
 
 const API = "https://api.vrchat.cloud/api/1";
-const debugLogFile = path.resolve("./debug.log");
 
-const config = JSON.parse(fs.readFileSync("config.json", "utf-8"));
+const isPkg = typeof process !== "undefined" && typeof process.pkg !== "undefined";
+const exeDir = isPkg ? path.dirname(process.execPath) : process.cwd();
+const writeableDir = exeDir; // write session/debug/blockedGroups next to exe when packaged
+const debugLogFile = path.resolve(path.join(writeableDir, "debug.log"));
+
+function readBundledOrExternal(filename, fallbackContent = null) {
+  const candidates = [
+    path.join(process.cwd(), filename),
+    path.join(writeableDir, filename),
+    // __dirname may only exist for bundled/cjs builds; guard its use
+    (typeof __dirname !== "undefined" ? path.join(__dirname, filename) : null),
+  ].filter(Boolean);
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return fs.readFileSync(p, "utf-8");
+    } catch (e) {}
+  }
+  if (fallbackContent !== null) return fallbackContent;
+  throw new Error(`Unable to find ${filename}`);
+}
+
+let config = {};
+try {
+  const configText = readBundledOrExternal(
+    "config.json",
+    JSON.stringify({
+      discordWebhook: null,
+      debug: false,
+      blockedGroupsAutoUpdate: true,
+      blockedGroupsRemoteUrl: "https://raw.githubusercontent.com/RWolfyo/VRChatMonitor/refs/heads/master/blockedGroups.jsonc",
+    })
+  );
+  config = JSON.parse(configText);
+} catch (e) {
+  console.error("Failed to load config.json, using defaults:", e && (e.message || e));
+  config = { discordWebhook: null, debug: false, blockedGroupsAutoUpdate: true, blockedGroupsRemoteUrl: "https://raw.githubusercontent.com/RWolfyo/VRChatMonitor/refs/heads/master/blockedGroups.jsonc" };
+}
+
 const {
   discordWebhook,
   debug,
@@ -20,7 +56,8 @@ let blockedGroups = []; // will be populated by loadBlockedGroups()
 
 let authHeaders = {};
 let cookies = "";
-const sessionFile = path.resolve("./session.json");
+const sessionFile = path.join(writeableDir, "session.json");
+const blockedGroupsPath = path.join(writeableDir, "blockedGroups.jsonc");
 const recentlySeenJoins = new Set();
 
 // logDebug(): Log debug messages when debug is enabled.
@@ -472,7 +509,16 @@ async function loadBlockedGroups() {
           if (remoteArray) {
             let localText = "";
             try {
-              localText = fs.readFileSync("blockedGroups.jsonc", "utf-8");
+              // Prefer local file placed next to the exe (writeableDir) or current working dir.
+              if (fs.existsSync(blockedGroupsPath)) {
+                localText = fs.readFileSync(blockedGroupsPath, "utf-8");
+              } else {
+                try {
+                  localText = readBundledOrExternal("blockedGroups.jsonc", null);
+                } catch {
+                  localText = null;
+                }
+              }
             } catch (e) {
               logDebug(
                 "Local blockedGroups.jsonc not found or unreadable:",
@@ -509,14 +555,21 @@ async function loadBlockedGroups() {
               );
             } else {
               try {
-                fs.writeFileSync("blockedGroups.jsonc", text);
-                console.log(
-                  "💾 blockedGroups.jsonc updated from remote source."
-                );
-                logDebug(
-                  "blockedGroups.jsonc updated from",
-                  blockedGroupsRemoteUrl
-                );
+                try {
+                  fs.writeFileSync(blockedGroupsPath, text);
+                  console.log(
+                    "💾 blockedGroups.jsonc updated from remote source."
+                  );
+                  logDebug(
+                    "blockedGroups.jsonc updated from",
+                    blockedGroupsRemoteUrl
+                  );
+                } catch (e) {
+                  logDebug(
+                    "Failed to write updated blockedGroups.jsonc:",
+                    e && (e.stack || e.message || e)
+                  );
+                }
               } catch (e) {
                 logDebug(
                   "Failed to write updated blockedGroups.jsonc:",
@@ -550,9 +603,23 @@ async function loadBlockedGroups() {
     );
   }
   try {
-    blockedGroups = parse(
-      fs.readFileSync("blockedGroups.jsonc", "utf-8")
-    ).blockedGroups;
+    try {
+      const bgText = (() => {
+        if (fs.existsSync(blockedGroupsPath)) return fs.readFileSync(blockedGroupsPath, "utf-8");
+        try {
+          return readBundledOrExternal("blockedGroups.jsonc", '{"blockedGroups": []}');
+        } catch {
+          return '{"blockedGroups": []}';
+        }
+      })();
+      blockedGroups = parse(bgText).blockedGroups;
+    } catch (e) {
+      logDebug(
+        "Failed to load local blockedGroups.jsonc into memory:",
+        e && (e.stack || e.message || e)
+      );
+      blockedGroups = [];
+    }
   } catch (e) {
     logDebug(
       "Failed to load local blockedGroups.jsonc into memory:",
