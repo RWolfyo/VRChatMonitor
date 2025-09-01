@@ -509,7 +509,6 @@ async function loadBlockedGroups() {
               );
             } else {
               try {
-                // Prefer writing the fetched text to preserve comments/formatting if available
                 fs.writeFileSync("blockedGroups.jsonc", text);
                 console.log(
                   "💾 blockedGroups.jsonc updated from remote source."
@@ -550,7 +549,6 @@ async function loadBlockedGroups() {
       e && (e.stack || e.message || e)
     );
   }
-  // finally, ensure blockedGroups variable is loaded from the local file
   try {
     blockedGroups = parse(
       fs.readFileSync("blockedGroups.jsonc", "utf-8")
