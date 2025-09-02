@@ -99,22 +99,40 @@ function parseCookies(setCookieHeaders) {
 // login(): Perform login to VRChat and persist session cookies (prompts for credentials/2FA).
 async function login() {
   if (fs.existsSync(sessionFile)) {
-    const session = JSON.parse(fs.readFileSync(sessionFile, "utf-8"));
-    cookies = session.cookies || "";
-    authHeaders = {
-      "User-Agent": "VRChatMonitor/1.0 (hubert@wolfyo.eu)",
-      Cookie: cookies,
-    };
     try {
-      const res = await fetch(`${API}/auth/user`, { headers: authHeaders });
-      const data = await res.json();
-      logDebug("Reusing session:", data);
-      if (res.ok && data.id) {
-        console.log(`✅ Logged in as: ${data.displayName} (session reuse)`);
-        return data;
+      const session = JSON.parse(fs.readFileSync(sessionFile, "utf-8"));
+      const sessionCookies =
+        session && typeof session.cookies === "string"
+          ? session.cookies.trim()
+          : "";
+      if (sessionCookies) {
+        cookies = sessionCookies;
+        authHeaders = {
+          "User-Agent": "VRChatMonitor/1.0 (hubert@wolfyo.eu)",
+          Cookie: cookies,
+        };
+        try {
+          const res = await fetch(`${API}/auth/user`, { headers: authHeaders });
+          const data = await res.json();
+          logDebug("Reusing session:", data);
+          if (res.ok && data.id) {
+            console.log(`✅ Logged in as: ${data.displayName} (session reuse)`);
+            return data;
+          }
+        } catch {}
+        console.log("⚠️ Cached session invalid, re-login required.");
+      } else {
+        logDebug("Cached session found but cookies are empty; ignoring cached session.");
+        // Remove the empty session file to avoid repeated invalid reuse attempts
+        try {
+          fs.unlinkSync(sessionFile);
+          logDebug("Empty session file removed:", sessionFile);
+        } catch (e) {}
       }
-    } catch {}
-    console.log("⚠️ Cached session invalid, re-login required.");
+    } catch (e) {
+      logDebug("Failed to read/parse session file:", e && (e.message || e));
+      console.log("⚠️ Cached session invalid, re-login required.");
+    }
   }
 
   const username = readlineSync.question("VRChat Username: ");
