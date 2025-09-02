@@ -427,13 +427,66 @@ async function processPlayerJoin(userId, displayName) {
 }
 
 // windowsNotify(): Send a Windows system notification.
+function findSnoreToastExe() {
+  const candidates = [
+    // Prefer vendor next to exe (packaged)
+    path.join(exeDir, "vendor", "SnoreToast.exe"),
+    path.join(exeDir, "vendor", "snoretoast.exe"),
+    path.join(exeDir, "vendor", "snoretoast-x64.exe"),
+    // Common node_modules locations when running unpackaged / in dev
+    path.join(process.cwd(), "node_modules", "node-notifier", "vendor", "SnoreToast.exe"),
+    path.join(process.cwd(), "node_modules", "node-notifier", "vendor", "snoretoast.exe"),
+    path.join(process.cwd(), "node_modules", "node-notifier", "vendor", "snoretoast-x64.exe"),
+    // Fallback to __dirname relative lookup (for bundled cjs)
+    (typeof __dirname !== "undefined") ? path.join(__dirname, "node_modules", "node-notifier", "vendor", "SnoreToast.exe") : null,
+  ].filter(Boolean);
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch (e) {}
+  }
+  return null;
+}
+
 function windowsNotify(msg) {
   try {
-    notifier.notify({
+    const snorePath = findSnoreToastExe();
+    if (notifier && notifier.WindowsToaster) {
+      const opts = {
+        title: "VRChat Alert",
+        message: msg,
+        sound: true,
+        wait: false,
+      };
+      if (snorePath) {
+        opts.customPath = snorePath;
+        logDebug("Using SnoreToast at:", snorePath);
+      } else {
+        logDebug("SnoreToast executable not found; using default WindowsToaster behavior.");
+      }
+      try {
+        const w = new notifier.WindowsToaster(opts);
+        w.notify(opts, function (err, response, metadata) {
+          if (err) logDebug("WindowsToaster notify error:", err && (err.stack || err.message || err));
+          else logDebug("WindowsToaster response:", response, metadata);
+        });
+        return;
+      } catch (e) {
+        logDebug("WindowsToaster construction/notify failed, falling back:", e && (e.stack || e.message || e));
+      }
+    }
+
+    // Fallback to generic notifier.notify
+    const options = {
       title: "VRChat Alert",
       message: msg,
       sound: true,
       wait: false,
+    };
+    if (snorePath) options.customPath = snorePath;
+    notifier.notify(options, (err, response, metadata) => {
+      if (err) logDebug("notifier.notify error:", err && (err.stack || err.message || err));
+      else logDebug("notifier.notify response:", response, metadata);
     });
   } catch (e) {
     logDebug("windowsNotify error:", e && (e.stack || e.message || e));
