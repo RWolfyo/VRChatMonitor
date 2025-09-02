@@ -96,6 +96,32 @@ function parseCookies(setCookieHeaders) {
   return setCookieHeaders.map((c) => c.split(";")[0]).join("; ");
 }
 
+/**
+ * extractSetCookie(): Robustly extract "set-cookie" values from a fetch Response.
+ * - Supports responses where headers.raw() exists (node-fetch / older environments)
+ * - Supports the WHATWG Headers API (headers.get)
+ * - Returns either an array of set-cookie strings, a single string, or null
+ */
+function extractSetCookie(res) {
+  try {
+    if (!res || !res.headers) return null;
+    const h = res.headers;
+    if (typeof h.raw === "function") {
+      // node-fetch style: raw() -> { 'set-cookie': [ ... ] }
+      const raw = h.raw();
+      return raw && raw["set-cookie"] ? raw["set-cookie"] : null;
+    }
+    if (typeof h.get === "function") {
+      // WHATWG Headers: get may return a string (possibly combined)
+      const val = h.get("set-cookie");
+      return val || null;
+    }
+  } catch (e) {
+    logDebug("extractSetCookie failed:", e && (e.message || e));
+  }
+  return null;
+}
+
 // login(): Perform login to VRChat and persist session cookies (prompts for credentials/2FA).
 async function login() {
   if (fs.existsSync(sessionFile)) {
@@ -169,7 +195,7 @@ async function login() {
       throw new Error(`2FA verification failed: ${JSON.stringify(data)}`);
     console.log("✅ 2FA verified.");
 
-    const setCookie = res.headers.raw()["set-cookie"];
+    const setCookie = extractSetCookie(res);
     cookies = parseCookies(setCookie);
     authHeaders = {
       "User-Agent": "VRChatMonitor/1.0 (hubert@wolfyo.eu)",
@@ -178,10 +204,7 @@ async function login() {
   } else {
     // No 2FA required — try to capture cookies from the initial auth response (if any)
     try {
-      const setCookie =
-        res && res.headers && typeof res.headers.raw === "function"
-          ? res.headers.raw()["set-cookie"]
-          : null;
+      const setCookie = extractSetCookie(res);
       const extracted = parseCookies(setCookie);
       if (extracted) {
         cookies = extracted;
