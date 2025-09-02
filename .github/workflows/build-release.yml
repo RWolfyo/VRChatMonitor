@@ -40,7 +40,16 @@ jobs:
           Copy-Item -Path "config.json" -Destination $releaseDir -Force -ErrorAction SilentlyContinue
           Copy-Item -Path "blockedGroups.jsonc" -Destination $releaseDir -Force -ErrorAction SilentlyContinue
           
-          Write-Host "Including node-notifier vendor executables (if present)..."
+          Write-Host "Including vendor executables (project/vendor and node-notifier vendor, if present)..."
+          # Copy project's vendor folder (e.g. vendor\ffplay.exe) into the release artifact
+          if (Test-Path "vendor") {
+            New-Item -ItemType Directory -Path "$releaseDir\vendor" -Force | Out-Null
+            Copy-Item -Path "vendor\*" -Destination "$releaseDir\vendor" -Recurse -Force -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "project vendor directory not found; skipping"
+          }
+
+          # Also include node-notifier's vendor files if present
           if (Test-Path "node_modules\node-notifier\vendor") {
             New-Item -ItemType Directory -Path "$releaseDir\vendor" -Force | Out-Null
             Copy-Item -Path "node_modules\node-notifier\vendor\*" -Destination "$releaseDir\vendor" -Recurse -Force -ErrorAction SilentlyContinue

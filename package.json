@@ -22,6 +22,7 @@
     "assets": [
       "blockedGroups.jsonc",
       "config.json",
+      "vendor/**",
       "node_modules/jsonc-parser/lib/**",
       "node_modules/node-notifier/vendor/**",
       "node_modules/node-notifier/lib/**"

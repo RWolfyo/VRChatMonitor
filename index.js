@@ -4,10 +4,12 @@ import readlineSync from "readline-sync";
 import notifier from "node-notifier";
 import path from "path";
 import { parse } from "jsonc-parser";
+import { execFile } from "child_process";
 
 const API = "https://api.vrchat.cloud/api/1";
 
-const isPkg = typeof process !== "undefined" && typeof process.pkg !== "undefined";
+const isPkg =
+  typeof process !== "undefined" && typeof process.pkg !== "undefined";
 const exeDir = isPkg ? path.dirname(process.execPath) : process.cwd();
 const writeableDir = exeDir; // write session/debug/blockedGroups next to exe when packaged
 const debugLogFile = path.resolve(path.join(writeableDir, "debug.log"));
@@ -17,7 +19,7 @@ function readBundledOrExternal(filename, fallbackContent = null) {
     path.join(process.cwd(), filename),
     path.join(writeableDir, filename),
     // __dirname may only exist for bundled/cjs builds; guard its use
-    (typeof __dirname !== "undefined" ? path.join(__dirname, filename) : null),
+    typeof __dirname !== "undefined" ? path.join(__dirname, filename) : null,
   ].filter(Boolean);
   for (const p of candidates) {
     try {
@@ -36,20 +38,36 @@ try {
       discordWebhook: null,
       debug: false,
       blockedGroupsAutoUpdate: true,
-      blockedGroupsRemoteUrl: "https://raw.githubusercontent.com/RWolfyo/VRChatMonitor/refs/heads/master/blockedGroups.jsonc",
+      blockedGroupsRemoteUrl:
+        "https://raw.githubusercontent.com/RWolfyo/VRChatMonitor/refs/heads/master/blockedGroups.jsonc",
+      playSound: true,
+      playVolume: 0.5,
     })
   );
   config = JSON.parse(configText);
 } catch (e) {
-  console.error("Failed to load config.json, using defaults:", e && (e.message || e));
-  config = { discordWebhook: null, debug: false, blockedGroupsAutoUpdate: true, blockedGroupsRemoteUrl: "https://raw.githubusercontent.com/RWolfyo/VRChatMonitor/refs/heads/master/blockedGroups.jsonc" };
+  console.error(
+    "Failed to load config.json, using defaults:",
+    e && (e.message || e)
+  );
+  config = {
+    discordWebhook: null,
+    debug: false,
+    blockedGroupsAutoUpdate: true,
+    blockedGroupsRemoteUrl:
+      "https://raw.githubusercontent.com/RWolfyo/VRChatMonitor/refs/heads/master/blockedGroups.jsonc",
+    playSound: true,
+    playVolume: 0.5,
+  };
 }
 
 const {
   discordWebhook,
   debug,
   blockedGroupsAutoUpdate = true,
-  blockedGroupsRemoteUrl = null,
+  blockedGroupsRemoteUrl = "https://raw.githubusercontent.com/RWolfyo/VRChatMonitor/refs/heads/master/blockedGroups.jsonc",
+  playSound = true,
+  playVolume = 0.5,
 } = config;
 
 let blockedGroups = []; // will be populated by loadBlockedGroups()
@@ -416,6 +434,11 @@ async function processPlayerJoin(userId, displayName) {
       } catch (e) {
         logDebug("discordNotify failed:", e && (e.stack || e.message || e));
       }
+      try {
+        playAlertSound();
+      } catch (e) {
+        logDebug("playAlertSound failed:", e && (e.stack || e.message || e));
+      }
 
       logDebug("Blocked group matches for", userId, matches);
     } else {
@@ -434,11 +457,37 @@ function findSnoreToastExe() {
     path.join(exeDir, "vendor", "snoretoast.exe"),
     path.join(exeDir, "vendor", "snoretoast-x64.exe"),
     // Common node_modules locations when running unpackaged / in dev
-    path.join(process.cwd(), "node_modules", "node-notifier", "vendor", "SnoreToast.exe"),
-    path.join(process.cwd(), "node_modules", "node-notifier", "vendor", "snoretoast.exe"),
-    path.join(process.cwd(), "node_modules", "node-notifier", "vendor", "snoretoast-x64.exe"),
+    path.join(
+      process.cwd(),
+      "node_modules",
+      "node-notifier",
+      "vendor",
+      "SnoreToast.exe"
+    ),
+    path.join(
+      process.cwd(),
+      "node_modules",
+      "node-notifier",
+      "vendor",
+      "snoretoast.exe"
+    ),
+    path.join(
+      process.cwd(),
+      "node_modules",
+      "node-notifier",
+      "vendor",
+      "snoretoast-x64.exe"
+    ),
     // Fallback to __dirname relative lookup (for bundled cjs)
-    (typeof __dirname !== "undefined") ? path.join(__dirname, "node_modules", "node-notifier", "vendor", "SnoreToast.exe") : null,
+    typeof __dirname !== "undefined"
+      ? path.join(
+          __dirname,
+          "node_modules",
+          "node-notifier",
+          "vendor",
+          "SnoreToast.exe"
+        )
+      : null,
   ].filter(Boolean);
   for (const p of candidates) {
     try {
@@ -462,17 +511,26 @@ function windowsNotify(msg) {
         opts.customPath = snorePath;
         logDebug("Using SnoreToast at:", snorePath);
       } else {
-        logDebug("SnoreToast executable not found; using default WindowsToaster behavior.");
+        logDebug(
+          "SnoreToast executable not found; using default WindowsToaster behavior."
+        );
       }
       try {
         const w = new notifier.WindowsToaster(opts);
         w.notify(opts, function (err, response, metadata) {
-          if (err) logDebug("WindowsToaster notify error:", err && (err.stack || err.message || err));
+          if (err)
+            logDebug(
+              "WindowsToaster notify error:",
+              err && (err.stack || err.message || err)
+            );
           else logDebug("WindowsToaster response:", response, metadata);
         });
         return;
       } catch (e) {
-        logDebug("WindowsToaster construction/notify failed, falling back:", e && (e.stack || e.message || e));
+        logDebug(
+          "WindowsToaster construction/notify failed, falling back:",
+          e && (e.stack || e.message || e)
+        );
       }
     }
 
@@ -485,11 +543,122 @@ function windowsNotify(msg) {
     };
     if (snorePath) options.customPath = snorePath;
     notifier.notify(options, (err, response, metadata) => {
-      if (err) logDebug("notifier.notify error:", err && (err.stack || err.message || err));
+      if (err)
+        logDebug(
+          "notifier.notify error:",
+          err && (err.stack || err.message || err)
+        );
       else logDebug("notifier.notify response:", response, metadata);
     });
   } catch (e) {
     logDebug("windowsNotify error:", e && (e.stack || e.message || e));
+  }
+}
+
+// playAlertSound(): Play alert.mp3 natively if enabled in config.
+async function playAlertSound() {
+  try {
+    logDebug("playAlertSound invoked", {
+      playSound,
+      platform: process.platform,
+    });
+    if (!playSound) {
+      logDebug("playAlertSound skipped because playSound=false in config.");
+      return;
+    }
+
+    const candidates = [
+      path.join(exeDir, "alert.mp3"),
+      path.join(process.cwd(), "alert.mp3"),
+      // __dirname may exist in bundled cjs builds
+      typeof __dirname !== "undefined"
+        ? path.join(__dirname, "alert.mp3")
+        : null,
+    ].filter(Boolean);
+
+    logDebug("playAlertSound candidates:", candidates);
+    const mp3Path = candidates.find((p) => {
+      try {
+        return fs.existsSync(p);
+      } catch {
+        return false;
+      }
+    });
+
+    if (!mp3Path) {
+      logDebug("Alert sound file not found; looked at:", candidates);
+      return;
+    }
+
+    logDebug("playAlertSound selected file:", mp3Path);
+
+    // Only use bundled ffplay (quiet playback, no UI). Do not fall back to other methods.
+    const ffplayCandidates = [
+      path.join(exeDir, "vendor", "ffplay.exe"),
+      path.join(exeDir, "vendor", "ffplay"),
+      path.join(process.cwd(), "vendor", "ffplay.exe"),
+      path.join(process.cwd(), "vendor", "ffplay"),
+      // __dirname fallback
+      typeof __dirname !== "undefined"
+        ? path.join(__dirname, "vendor", "ffplay.exe")
+        : null,
+      typeof __dirname !== "undefined"
+        ? path.join(__dirname, "vendor", "ffplay")
+        : null,
+    ].filter(Boolean);
+
+    const ffplayPath = ffplayCandidates.find((p) => {
+      try {
+        return fs.existsSync(p);
+      } catch {
+        return false;
+      }
+    });
+
+    if (!ffplayPath) {
+      logDebug(
+        "ffplay not found in vendor; playback disabled. Place ffplay in vendor/ffplay or vendor/ffplay.exe next to the exe."
+      );
+      return;
+    }
+
+    logDebug("playAlertSound using bundled ffplay:", ffplayPath);
+    // Pass volume via ffplay audio filter; playVolume expected 0.0 - 1.0
+    const args = [
+      "-nodisp",
+      "-autoexit",
+      "-loglevel",
+      "quiet",
+      "-af",
+      `volume=${playVolume}`,
+      mp3Path,
+    ];
+    const cp = execFile(
+      ffplayPath,
+      args,
+      { windowsHide: true },
+      (err, stdout, stderr) => {
+        if (err)
+          logDebug(
+            "ffplay playback error:",
+            err && (err.stack || err.message || err)
+          );
+        if (stdout && stdout.toString().trim())
+          logDebug("ffplay stdout:", stdout.toString());
+        if (stderr && stderr.toString().trim())
+          logDebug("ffplay stderr:", stderr.toString());
+        if (!err) logDebug("ffplay finished without error");
+      }
+    );
+    try {
+      logDebug("ffplay started pid:", cp && cp.pid);
+    } catch {}
+    return;
+  } catch (e) {
+    logDebug(
+      "playAlertSound unexpected error:",
+      e && (e.stack || e.message || e)
+    );
   }
 }
 
@@ -518,6 +687,11 @@ async function triggerTestNotification() {
   const testMsg = `TEST ALERT: Simulated blocked-group detection at ${new Date().toLocaleTimeString()}`;
   console.log(`→ Emitting test notification: ${testMsg}`);
   windowsNotify(testMsg);
+  try {
+    playAlertSound();
+  } catch (e) {
+    logDebug("playAlertSound failed (test):", e && (e.stack || e.message || e));
+  }
   try {
     await discordNotify(testMsg);
   } catch (e) {
@@ -567,7 +741,10 @@ async function loadBlockedGroups() {
                 localText = fs.readFileSync(blockedGroupsPath, "utf-8");
               } else {
                 try {
-                  localText = readBundledOrExternal("blockedGroups.jsonc", null);
+                  localText = readBundledOrExternal(
+                    "blockedGroups.jsonc",
+                    null
+                  );
                 } catch {
                   localText = null;
                 }
@@ -658,9 +835,13 @@ async function loadBlockedGroups() {
   try {
     try {
       const bgText = (() => {
-        if (fs.existsSync(blockedGroupsPath)) return fs.readFileSync(blockedGroupsPath, "utf-8");
+        if (fs.existsSync(blockedGroupsPath))
+          return fs.readFileSync(blockedGroupsPath, "utf-8");
         try {
-          return readBundledOrExternal("blockedGroups.jsonc", '{"blockedGroups": []}');
+          return readBundledOrExternal(
+            "blockedGroups.jsonc",
+            '{"blockedGroups": []}'
+          );
         } catch {
           return '{"blockedGroups": []}';
         }
