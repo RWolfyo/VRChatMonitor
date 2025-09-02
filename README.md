@@ -1,6 +1,6 @@
 # VRChat Instance Monitor
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license) [![Build & Release](.github/workflows/build-release.yml:1)](.github/workflows/build-release.yml:1)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 
 Short description  
 VRChat Instance Monitor is a small Node.js CLI utility that watches a local VRChat instance log for player join events, checks joined players' VRChat groups against a configurable blocklist, and emits desktop notifications, optional sound, and Discord webhook alerts when a blocked-group member joins. It is designed to run from source or be packaged into a single Windows executable.
@@ -12,22 +12,12 @@ VRChat Instance Monitor is a small Node.js CLI utility that watches a local VRCh
 - [Installation & Setup](#installation--setup)
   - [Node.js (npm)](#nodejs-npm)
   - [Node.js (yarn)](#nodejs-yarn)
-  - [Python (optional)](#python-optional)
-  - [Docker (optional)](#docker-optional)
-- [Configuration & Environment Variables](#configuration--environment-variables)
-- [Running Locally](#running-locally)
-- [Usage](#usage)
+- [Configuration](#configuration)
 - [Scripts Summary](#scripts-summary)
-- [Testing](#testing)
-- [Building & Deployment](#building--deployment)
-  - [Sample Dockerfile](#sample-dockerfile)
-  - [docker-compose example](#docker-compose-example)
-  - [CI/CD notes (GitHub Actions)](#cicd-notes-github-actions)
+- [CI/CD notes (GitHub Actions)](#cicd-notes-github-actions)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
-- [Changelog / Releases](#changelog--releases)
-- [Acknowledgements](#acknowledgements)
 - [Contact](#contact)
 
 ## Features
