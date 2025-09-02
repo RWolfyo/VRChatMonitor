@@ -136,3 +136,4 @@ dist
 .pnp.*
 session.json
 debug.log
+/build
