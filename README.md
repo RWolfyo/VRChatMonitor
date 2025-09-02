@@ -116,7 +116,7 @@ The repo already includes a Windows build-and-release workflow at [`.github/work
 
 ## License
 
-This project is licensed under the MIT License. See [`LICENSE`](LICENSE:1).
+This project is licensed under the MIT License. See [`LICENSE`](LICENSE).
 
 ## Contact
 
