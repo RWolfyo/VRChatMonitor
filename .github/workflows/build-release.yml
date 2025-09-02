@@ -39,6 +39,7 @@ jobs:
           Copy-Item -Path "README.md" -Destination $releaseDir -Force -ErrorAction SilentlyContinue
           Copy-Item -Path "config.json" -Destination $releaseDir -Force -ErrorAction SilentlyContinue
           Copy-Item -Path "blockedGroups.jsonc" -Destination $releaseDir -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "alert.mp3" -Destination $releaseDir -Force -ErrorAction SilentlyContinue
           
           Write-Host "Including vendor executables (project/vendor and node-notifier vendor, if present)..."
           # Copy project's vendor folder (e.g. vendor\ffplay.exe) into the release artifact
