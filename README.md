@@ -13,7 +13,7 @@ VRChat Instance Monitor is a small Node.js CLI utility that watches a local VRCh
   - [Node.js (yarn)](#nodejs-yarn)
 - [Configuration](#configuration)
 - [Scripts Summary](#scripts-summary)
-- [CI/CD (GitHub Actions)](#ci-cd-github-actions)
+- [CI/CD](#ci-cd)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
@@ -81,7 +81,7 @@ The app reads defaults from [`config.json`]. You may override settings by editin
 | build:bundle | `esbuild` to produce `build/index.cjs` |
 | build:pkg | `pkg` to produce Windows exe |
 
-### CI/CD (GitHub Actions)
+### CI/CD
 
 The repo already includes a Windows build-and-release workflow at [`.github/workflows/build-release.yml`] which:
 - checks out code
