@@ -122,7 +122,9 @@ async function login() {
         } catch {}
         console.log("⚠️ Cached session invalid, re-login required.");
       } else {
-        logDebug("Cached session found but cookies are empty; ignoring cached session.");
+        logDebug(
+          "Cached session found but cookies are empty; ignoring cached session."
+        );
         // Remove the empty session file to avoid repeated invalid reuse attempts
         try {
           fs.unlinkSync(sessionFile);
@@ -173,16 +175,50 @@ async function login() {
       "User-Agent": "VRChatMonitor/1.0 (hubert@wolfyo.eu)",
       Cookie: cookies,
     };
+  } else {
+    // No 2FA required — try to capture cookies from the initial auth response (if any)
+    try {
+      const setCookie =
+        res && res.headers && typeof res.headers.raw === "function"
+          ? res.headers.raw()["set-cookie"]
+          : null;
+      const extracted = parseCookies(setCookie);
+      if (extracted) {
+        cookies = extracted;
+        authHeaders = {
+          "User-Agent": "VRChatMonitor/1.0 (hubert@wolfyo.eu)",
+          Cookie: cookies,
+        };
+      }
+    } catch (e) {
+      logDebug(
+        "Failed to extract cookies from initial auth response:",
+        e && (e.message || e)
+      );
+    }
   }
 
-  fs.writeFileSync(sessionFile, JSON.stringify({ cookies }, null, 2));
-  console.log("💾 Session saved.");
-
+  // Verify final login success before saving session file
   res = await fetch(`${API}/auth/user`, { headers: authHeaders });
   data = await res.json();
   logDebug("Final login user data:", data);
 
   if (!res.ok || !data.id) throw new Error("Login failed after 2FA.");
+
+  // Only persist session.json when we actually captured non-empty cookies
+  if (cookies && typeof cookies === "string" && cookies.trim()) {
+    try {
+      fs.writeFileSync(sessionFile, JSON.stringify({ cookies }, null, 2));
+      console.log("💾 Session saved.");
+    } catch (e) {
+      logDebug("Failed to save session file:", e && (e.message || e));
+    }
+  } else {
+    logDebug(
+      "Login succeeded but no cookies were captured; session not saved."
+    );
+  }
+
   console.log(`✅ Logged in as: ${data.displayName}`);
   return data;
 }
