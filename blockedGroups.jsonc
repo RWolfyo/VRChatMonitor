@@ -1,12 +1,66 @@
 {
   "blockedGroups": [
+    // Contributions: Wolfyo
     "grp_9db8838d-80c7-46d5-8a8f-75ab6028fb75", // REDMOON BAR OWNER
-    "grp_74ffdb3a-ef08-4434-8268-e29e7e6eb0dc", // RedMoon Bar
     "grp_ee831cbf-e480-4616-8639-90a71f09fbc7", // REDMOON BAR ADMIN
     "grp_97295c68-6def-4e5f-a892-2a258e0fb829", // REDMOON BAR MOD
     "grp_5af50429-cc56-40cf-8b98-cc7dac69fbcb", // REDMOON BAR STAFF
     "grp_348dd9de-c039-4f5d-8321-ae8bbc616872", // Redmoon VIP
     "grp_e997ff8c-2a06-4c43-951f-f55ebe28b9d8", // REDMOON HUSBAND
-    "grp_425ae4ab-039e-4461-8fb7-3fad0bacc485" // Private 373
+    // Contributions: Willrick
+    "grp_425ae4ab-039e-4461-8fb7-3fad0bacc485", // Private 373
+    // Contributions: ThtsWhaSheSaid64
+    "grp_f517aa23-0a67-4a42-a395-33087a9eb03a", // 555
+    "grp_4513c9ce-b117-4441-b963-1f99a0a8048b", // 993 Private
+    "grp_2ccd5d33-c85b-4476-aa62-1f89bc795cdf", // 9mm
+    "grp_ed53326d-3ce2-449d-89bb-f01305c510c7", // Audio Graveyard
+    "grp_4c17a268-f51b-4e99-b5bd-abab23ef5cda", // BTDx_x
+    "grp_06b0c8f7-9b68-4812-8324-f6e301f64cbf", // Coldwars On Top
+    "grp_0baeb770-eb97-424e-b341-55bdfb4c6072", // Coffin Fleet
+    "grp_c2cf3264-0408-4454-9bf4-c79bffb6bb82", // Cos
+    "grp_34d128f7-112b-4634-a398-7ae2db0ca4b6", // Death Chant Private
+    "grp_37d10454-e34a-4bcd-a6ee-429010e8d40d", // Disciples
+    "grp_53219d12-a603-4428-9463-52d4c194c947", // DOA
+    "grp_74a20334-1d41-492f-b0ea-fa6c7265ef00", // F*slur Central
+    "grp_53268ca0-cf0b-496d-9774-83b0859a71d7", // Gamegrave
+    "grp_eecc1ffc-a8b9-44d4-9a6a-8ed8dff1b0fa", // Ghosts fan
+    "grp_32d8df76-24b0-439e-b296-7857cc146144", // Ghosts favs
+    "grp_ed346e0f-ef44-4a05-aff2-9e170840e97b", // Giggling Casket
+    "grp_1a93c3a4-d20c-4623-8c93-9e32f42e304d", // Graveyard
+    "grp_2dc66419-3480-4608-987c-a06900a26829", // H4RMLESS
+    "grp_a7271bec-731a-4388-abe2-b4c7be189d42", // H O A
+    "grp_3a92830b-653d-476a-bd68-281d5c610684", // KASKARLArpington
+    "grp_bba3bda6-a8b0-483c-9ea3-d03186215554", // KittySec
+    "grp_95d4d40d-13e1-4319-8c08-07679e5246ec", // K L O W N S
+    "grp_9214e642-2ce5-4696-9689-5f77b8c7c99b", // Larper Gang
+    "grp_f99191dd-f6db-4646-b5ca-4a0e7fca84e3", // Laughing Coffin
+    "grp_d9ffef9c-e02e-4cba-88c5-650994dbd6b2", // Laughing Condom Private
+    "grp_525e5ad9-9896-40fe-b3c2-9cbe4d596a74", // Laughing Condom Public
+    "grp_e0403db9-4cc0-4539-a9e7-7f78239e1fc1", // Laughing cumstain
+    "grp_6e56e148-cfc8-41bf-863b-d0736d82fda4", // Larpstle
+    "grp_a6277c21-8fca-4166-9a3a-a3bd5951b98a", // LuvSec
+    "grp_99631afb-7721-4194-9e98-a05b6472d151", // Mango Caskets
+    "grp_915ae7e3-79eb-41f4-a3ef-4982e640abd4", // Murdagang
+    "grp_020fc622-606f-40d9-8337-f3c7ed648553", // Private Deceased
+    "grp_a1e576ee-2d88-40a1-943e-8f80ddb26f98", // Private Static
+    "grp_ab09017c-9294-4e55-8ce4-ba5493f5bceb", // Project 9ine
+    "grp_e4d3d591-228c-4a17-91cd-7b5da410bd48", // Rattle Gang
+    "grp_2ee5d9b8-a881-48c4-a827-fbfffa0c37e2", // S14
+    "grp_d57fbcf5-4b9b-47bd-98d6-1d865e81fdd8", // Script Kitty
+    "grp_5e9428e2-9282-4e80-b0da-14dc62fd8654", // Silent Family
+    "grp_da9d640f-0d4b-436a-a818-c7d13731fd1c", // Silent Society
+    "grp_ea0d2f32-0d3d-46d9-bb16-1f896bae5fc9", // Skid larpsv2
+    "grp_ad8263cd-f317-42cf-a66c-db26eb392ff9", // Slaughter Gang
+    "grp_b4bff973-c8da-4117-b599-85bc9172ef4d", // Slasher Gang
+    "grp_49bc9591-37b1-4f8b-9426-fda98dddead6", // SlAughter on toppp
+    "grp_73308038-4ea7-43d1-80e7-798495ee58ce", // So G4ng I Cr4shed Myself
+    "grp_91e2ae11-9f67-406a-b360-1a6ba9f32650", // Static
+    "grp_b94136b6-d186-4f79-8e2e-fd1b954567a9", // The f3ds
+    "grp_cc72ee6f-c1c7-4062-b0af-e821d021ebb6", // Toastys Avatars
+    "grp_d4ede2ac-14d6-4017-b350-7335baf079cf", // Trash
+    "grp_0a3d6e9e-e2ce-4abf-a40b-1ab2c1b880ef", // Trixz
+    "grp_d58c5937-aeaf-487b-ac2b-ef37590f81c8", // Undetected
+    "grp_f3cdfd9b-34cf-4065-a3c3-6bb44e311f26", // Y2K
+    "grp_8d123600-b80c-4767-ad3c-2232d8f22b18" // Y2K
   ]
 }
