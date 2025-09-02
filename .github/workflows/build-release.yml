@@ -75,13 +75,3 @@ jobs:
           asset_path: dist/vrc-monitor-windows-x64.zip
           asset_name: vrc-monitor-windows-x64.zip
           asset_content_type: application/zip
-
-      - name: Upload release asset (exe)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/vrc-monitor.exe
-          asset_name: vrc-monitor-windows-x64.exe
-          asset_content_type: application/octet-stream
