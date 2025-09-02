@@ -2,7 +2,6 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 
-Short description  
 VRChat Instance Monitor is a small Node.js CLI utility that watches a local VRChat instance log for player join events, checks joined players' VRChat groups against a configurable blocklist, and emits desktop notifications, optional sound, and Discord webhook alerts when a blocked-group member joins. It is designed to run from source or be packaged into a single Windows executable.
 
 ## Table of Contents
@@ -34,7 +33,7 @@ VRChat Instance Monitor is a small Node.js CLI utility that watches a local VRCh
 
 - Node.js 18.x (LTS recommended)  
   - Verify: 
-```[`bash()`]
+```bash
 node --version
 ```
 - npm (included with Node.js) or Yarn (classic)
@@ -49,14 +48,14 @@ node --version
 ### Node.js (npm)
 
 - Unix / macOS
-```[`bash()`]
+```bash
 git clone https://github.com/RWolfyo/VRChatMonitor.git
 cd VRChatMonitor
 npm install
 ```
 
 - Windows (cmd.exe / PowerShell)
-```[`bash()`]
+```bash
 git clone https://github.com/RWolfyo/VRChatMonitor.git
 cd VRChatMonitor
 npm install
@@ -64,7 +63,7 @@ npm install
 
 ### Node.js (yarn)
 
-```[`bash()`]
+```bash
 git clone https://github.com/RWolfyo/VRChatMonitor.git
 cd VRChatMonitor
 yarn install
