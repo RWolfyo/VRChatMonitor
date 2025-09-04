@@ -62,6 +62,10 @@
     "grp_0a3d6e9e-e2ce-4abf-a40b-1ab2c1b880ef", // Trixz
     "grp_d58c5937-aeaf-487b-ac2b-ef37590f81c8", // Undetected
     "grp_f3cdfd9b-34cf-4065-a3c3-6bb44e311f26", // Y2K
-    "grp_8d123600-b80c-4767-ad3c-2232d8f22b18" // Y2K
+    "grp_8d123600-b80c-4767-ad3c-2232d8f22b18", // Y2K
+    "grp_df034fff-743f-4a20-86a4-053fc9a68dba", // 308 Public
+    "grp_ef4d0bcf-943c-404a-baae-c374a17bbfc2", // TL COM
+    "grp_2da67716-d490-498a-af75-5d35e5e693f3", // Phantom
+    "grp_84766efb-6d2b-4cc1-bacf-c4b552333e58" // Phantom
   ]
 }
