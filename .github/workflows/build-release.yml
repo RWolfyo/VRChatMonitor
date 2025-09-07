@@ -4,12 +4,12 @@ on:
   push:
     branches:
       - master
-
+  workflow_dispatch: {}
 jobs:
   build:
     name: Build Windows x64 EXE and create release
     runs-on: windows-latest
-    if: ${{ !contains(toLower(github.event.head_commit.message || ''), '[ci-skip]') }}
+    if: ${{ !(contains(github.event.head_commit.message || '', '[ci-skip]') || contains(github.event.head_commit.message || '', '[CI-SKIP]')) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
