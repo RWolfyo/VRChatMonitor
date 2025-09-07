@@ -96,12 +96,7 @@ function parseCookies(setCookieHeaders) {
   return setCookieHeaders.map((c) => c.split(";")[0]).join("; ");
 }
 
-/**
- * extractSetCookie(): Robustly extract "set-cookie" values from a fetch Response.
- * - Supports responses where headers.raw() exists (node-fetch / older environments)
- * - Supports the WHATWG Headers API (headers.get)
- * - Returns either an array of set-cookie strings, a single string, or null
- */
+// extractSetCookie(): Robustly extract "set-cookie" values from a fetch Response.
 function extractSetCookie(res) {
   try {
     if (!res || !res.headers) return null;
