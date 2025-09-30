@@ -1002,14 +1002,47 @@ async function loadBlockedGroups() {
                 localArray = [];
               }
             }
-            const arraysEqual = (a, b) => {
-              if (!Array.isArray(a) || !Array.isArray(b)) return false;
-              if (a.length !== b.length) return false;
-              for (let i = 0; i < a.length; i++)
-                if (a[i] !== b[i]) return false;
-              return true;
+            // Canonicalize arrays of blocked-group entries so comparison ignores
+            // ordering, harmless extra fields, and formatting/comment differences.
+            const canonicalizeList = (arr) => {
+              if (!Array.isArray(arr)) return "[]";
+              const normalized = arr
+                .map((entry) => {
+                  if (typeof entry === "string") {
+                    return { groupId: entry };
+                  }
+                  if (!entry || typeof entry !== "object") return null;
+                  return {
+                    groupId: entry.groupId || entry.id || null,
+                    name: entry.name || entry.note || null,
+                    reason: entry.reason || null,
+                    severity: entry.severity || null,
+                  };
+                })
+                .filter(Boolean)
+                .sort((a, b) => {
+                  const A = String(a.groupId || "").toLowerCase();
+                  const B = String(b.groupId || "").toLowerCase();
+                  if (A < B) return -1;
+                  if (A > B) return 1;
+                  return 0;
+                });
+              return JSON.stringify(normalized);
             };
-            if (arraysEqual(remoteArray, localArray)) {
+ 
+            const canonicalEqual = (a, b) => {
+              try {
+                return canonicalizeList(a) === canonicalizeList(b);
+              } catch (e) {
+                try {
+                  return JSON.stringify(a) === JSON.stringify(b);
+                } catch {
+                  return false;
+                }
+              }
+            };
+ 
+            if (canonicalEqual(remoteArray, localArray)) {
               logDebug(
                 "Remote blockedGroups identical to local; no update needed."
               );
