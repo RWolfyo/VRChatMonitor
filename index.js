@@ -7,16 +7,16 @@ import { parse } from "jsonc-parser";
 import { execFile } from "child_process";
 
 const API = "https://api.vrchat.cloud/api/1";
- 
+
 // Bump this value when releasing a new app version
 const APP_VERSION = "1.0.0";
- 
+
 const isPkg =
   typeof process !== "undefined" && typeof process.pkg !== "undefined";
 const exeDir = isPkg ? path.dirname(process.execPath) : process.cwd();
 const writeableDir = exeDir; // write session/debug/blockedGroups next to exe when packaged
 const debugLogFile = path.resolve(path.join(writeableDir, "debug.log"));
- 
+
 // checkAppVersion(): Compare local APP_VERSION to the version embedded in blockedGroups.jsonc
 // If different, notify the user (console, Windows toast, Discord webhook if configured).
 async function checkAppVersion(remoteVersion) {
@@ -554,13 +554,18 @@ async function processPlayerJoin(userId, displayName) {
     // keywordBlacklist entries are compiled to RegExp objects (keywordRegexes).
     // Patterns are treated as regular expressions (case-insensitive).
     const keywordMatch = (text) => {
-      if (!text || !keywordRegexes || !Array.isArray(keywordRegexes)) return null;
+      if (!text || !keywordRegexes || !Array.isArray(keywordRegexes))
+        return null;
       const str = String(text);
       for (const rx of keywordRegexes) {
         try {
           if (rx.test(str)) return rx.source;
         } catch (e) {
-          logDebug("keyword regex test failed:", e && (e.message || e), rx && rx.source ? rx.source : rx);
+          logDebug(
+            "keyword regex test failed:",
+            e && (e.message || e),
+            rx && rx.source ? rx.source : rx
+          );
         }
       }
       return null;
@@ -1011,22 +1016,42 @@ async function loadBlockedGroups() {
             // - appVersion / version
             const normalizeConfig = (obj) => {
               const parsedObj = obj || {};
-              const appVersion = parsedObj.appVersion || parsedObj.version || null;
-              const keywordBlacklistArr = Array.isArray(parsedObj.keywordBlacklist)
-                ? parsedObj.keywordBlacklist.slice().map(String).filter(Boolean).sort()
+              const appVersion =
+                parsedObj.appVersion || parsedObj.version || null;
+              const keywordBlacklistArr = Array.isArray(
+                parsedObj.keywordBlacklist
+              )
+                ? parsedObj.keywordBlacklist
+                    .slice()
+                    .map(String)
+                    .filter(Boolean)
+                    .sort()
                 : [];
-              const whitelistGroupIdsArr = Array.isArray(parsedObj.whitelistGroupIds)
-                ? parsedObj.whitelistGroupIds.slice().map(String).filter(Boolean).sort()
+              const whitelistGroupIdsArr = Array.isArray(
+                parsedObj.whitelistGroupIds
+              )
+                ? parsedObj.whitelistGroupIds
+                    .slice()
+                    .map(String)
+                    .filter(Boolean)
+                    .sort()
                 : [];
-              const whitelistUserIdsArr = Array.isArray(parsedObj.whitelistUserIds)
-                ? parsedObj.whitelistUserIds.slice().map(String).filter(Boolean).sort()
+              const whitelistUserIdsArr = Array.isArray(
+                parsedObj.whitelistUserIds
+              )
+                ? parsedObj.whitelistUserIds
+                    .slice()
+                    .map(String)
+                    .filter(Boolean)
+                    .sort()
                 : [];
               const blockedRaw = Array.isArray(parsedObj.blockedGroups)
                 ? parsedObj.blockedGroups
                 : [];
               const blockedNormalized = blockedRaw
                 .map((entry) => {
-                  if (typeof entry === "string") return { groupId: String(entry) };
+                  if (typeof entry === "string")
+                    return { groupId: String(entry) };
                   if (!entry || typeof entry !== "object") return null;
                   return {
                     groupId: entry.groupId || entry.id || null,
@@ -1037,7 +1062,9 @@ async function loadBlockedGroups() {
                   };
                 })
                 .filter(Boolean)
-                .sort((a, b) => String(a.groupId || "").localeCompare(String(b.groupId || "")));
+                .sort((a, b) =>
+                  String(a.groupId || "").localeCompare(String(b.groupId || ""))
+                );
               return JSON.stringify({
                 appVersion,
                 keywordBlacklist: keywordBlacklistArr,
@@ -1046,24 +1073,37 @@ async function loadBlockedGroups() {
                 blockedGroups: blockedNormalized,
               });
             };
- 
+
             // remoteParsed and localParsed exist earlier in this function's scope.
             const remoteCanonical = normalizeConfig(remoteParsed || {});
             const localCanonical = normalizeConfig(localParsed || {});
- 
+
             if (remoteCanonical === localCanonical) {
-              logDebug("Remote blockedGroups/config identical to local; no update needed.");
+              logDebug(
+                "Remote blockedGroups/config identical to local; no update needed."
+              );
             } else {
               try {
                 try {
                   fs.writeFileSync(blockedGroupsPath, text);
-                  console.log("💾 blockedGroups.jsonc updated from remote source.");
-                  logDebug("blockedGroups.jsonc updated from", blockedGroupsRemoteUrl);
+                  console.log(
+                    "💾 blockedGroups.jsonc updated from remote source."
+                  );
+                  logDebug(
+                    "blockedGroups.jsonc updated from",
+                    blockedGroupsRemoteUrl
+                  );
                 } catch (e) {
-                  logDebug("Failed to write updated blockedGroups.jsonc:", e && (e.stack || e.message || e));
+                  logDebug(
+                    "Failed to write updated blockedGroups.jsonc:",
+                    e && (e.stack || e.message || e)
+                  );
                 }
               } catch (e) {
-                logDebug("Failed to write updated blockedGroups.jsonc:", e && (e.stack || e.message || e));
+                logDebug(
+                  "Failed to write updated blockedGroups.jsonc:",
+                  e && (e.stack || e.message || e)
+                );
               }
             }
           } else {
@@ -1106,7 +1146,7 @@ async function loadBlockedGroups() {
     })();
     try {
       const parsed = parse(bgText);
- 
+
       // If blockedGroups.jsonc contains an appVersion/version field, compare it to APP_VERSION
       // and notify the user if the versions differ.
       try {
@@ -1117,7 +1157,7 @@ async function loadBlockedGroups() {
       } catch (e) {
         logDebug("App version check failed:", e && (e.message || e));
       }
- 
+
       // If the blockedGroups.jsonc contains keyword blacklist or whitelist info,
       // prefer those values over the config defaults.
       if (parsed) {
