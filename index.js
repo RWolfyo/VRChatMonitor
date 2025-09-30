@@ -7,12 +7,41 @@ import { parse } from "jsonc-parser";
 import { execFile } from "child_process";
 
 const API = "https://api.vrchat.cloud/api/1";
-
+ 
+// Bump this value when releasing a new app version
+const APP_VERSION = "1.0.0";
+ 
 const isPkg =
   typeof process !== "undefined" && typeof process.pkg !== "undefined";
 const exeDir = isPkg ? path.dirname(process.execPath) : process.cwd();
 const writeableDir = exeDir; // write session/debug/blockedGroups next to exe when packaged
 const debugLogFile = path.resolve(path.join(writeableDir, "debug.log"));
+ 
+// checkAppVersion(): Compare local APP_VERSION to the version embedded in blockedGroups.jsonc
+// If different, notify the user (console, Windows toast, Discord webhook if configured).
+async function checkAppVersion(remoteVersion) {
+  try {
+    if (!remoteVersion || typeof remoteVersion !== "string") return;
+    if (remoteVersion === APP_VERSION) {
+      logDebug("App version is up to date:", APP_VERSION);
+      return;
+    }
+    const msg = `New app version available: ${remoteVersion} (installed: ${APP_VERSION}). Please download the latest release from the repository.`;
+    console.log(`⚠️ UPDATE AVAILABLE: ${msg}`);
+    try {
+      windowsNotify(msg);
+    } catch (e) {
+      logDebug("windowsNotify for update failed:", e && (e.message || e));
+    }
+    try {
+      await discordNotify(msg);
+    } catch (e) {
+      logDebug("discordNotify for update failed:", e && (e.message || e));
+    }
+  } catch (e) {
+    logDebug("checkAppVersion unexpected error:", e && (e.message || e));
+  }
+}
 
 function readBundledOrExternal(filename, fallbackContent = null) {
   const candidates = [
@@ -70,7 +99,11 @@ const {
   playVolume = 0.5,
 } = config;
 
-let blockedGroups = []; // will be populated by loadBlockedGroups()
+let keywordBlacklist = [];
+let keywordRegexes = [];
+let whitelistGroupIds = [];
+let whitelistUserIds = [];
+let blockedGroups = [];
 
 let authHeaders = {};
 let cookies = "";
@@ -259,6 +292,23 @@ async function getUserGroups(userId) {
   const data = await res.json();
   logDebug(`Groups for ${userId}:`, data);
   return res.ok ? data : [];
+}
+
+// getUser(): Fetch user profile (displayName, bio, etc.)
+async function getUser(userId) {
+  if (!userId || typeof userId !== "string")
+    throw new TypeError("getUser: userId must be a string");
+  const url = `${API}/users/${userId}`;
+  logDebug("Fetching user profile:", url);
+  try {
+    const res = await fetch(url, { headers: authHeaders });
+    const data = await res.json();
+    logDebug(`User profile for ${userId}:`, data);
+    return res.ok ? data : null;
+  } catch (e) {
+    logDebug("getUser failed:", e && (e.stack || e.message || e));
+    return null;
+  }
 }
 
 // parseUserInfoFromLog(): Parse "Name (usr_xxx)" style fragments and return displayName/userId.
@@ -485,19 +535,127 @@ async function processPlayerJoin(userId, displayName) {
       return;
     }
 
-    const matches = groups.filter((g) => blockedGroups.includes(g.groupId));
+    // If the user is explicitly whitelisted, skip all checks for this user
+    if (whitelistUserIds && whitelistUserIds.includes(userId)) {
+      logDebug("User is whitelisted, skipping checks for", userId);
+      return;
+    }
+
+    // Fetch user profile (for displayName/bio keyword checks) but tolerate failures
+    const userProfile = await (async () => {
+      try {
+        return await getUser(userId);
+      } catch (e) {
+        return null;
+      }
+    })();
+
+    // helper for keyword detection using regex patterns provided in keywordBlacklist.
+    // keywordBlacklist entries are compiled to RegExp objects (keywordRegexes).
+    // Patterns are treated as regular expressions (case-insensitive).
+    const keywordMatch = (text) => {
+      if (!text || !keywordRegexes || !Array.isArray(keywordRegexes)) return null;
+      const str = String(text);
+      for (const rx of keywordRegexes) {
+        try {
+          if (rx.test(str)) return rx.source;
+        } catch (e) {
+          logDebug("keyword regex test failed:", e && (e.message || e), rx && rx.source ? rx.source : rx);
+        }
+      }
+      return null;
+    };
+
+    const matches = [];
+
+    // Check each group the user belongs to
+    for (const g of groups) {
+      try {
+        if (whitelistGroupIds && whitelistGroupIds.includes(g.groupId)) {
+          logDebug("Skipping whitelisted group", g.groupId);
+          continue;
+        }
+        // explicit blocked-group by id (supports normalized entries {groupId,reason,severity})
+        const blockedEntry = blockedGroups.find(
+          (bg) => bg && (bg.groupId === g.groupId || bg.id === g.groupId)
+        );
+        if (blockedEntry) {
+          matches.push({
+            type: "blockedGroup",
+            group: g,
+            entry: blockedEntry,
+          });
+          continue;
+        }
+        // keyword checks on group name/description
+        const nameMatch = keywordMatch(g.name);
+        const descMatch = keywordMatch(g.description);
+        const matchedKeyword = nameMatch || descMatch;
+        if (matchedKeyword) {
+          matches.push({
+            type: "keywordGroup",
+            group: g,
+            keyword: matchedKeyword,
+            reason: `keyword match: ${matchedKeyword}`,
+            severity: "medium",
+          });
+        }
+      } catch (e) {
+        logDebug(
+          "Error while checking group",
+          g,
+          e && (e.stack || e.message || e)
+        );
+      }
+    }
+
+    // Check user displayName / bio for keywords (if present)
+    if (userProfile) {
+      const nameKw = keywordMatch(userProfile.displayName || displayName);
+      const bioKw = keywordMatch(
+        userProfile.bio || userProfile.bioDescription || ""
+      );
+      const matchedUserKeyword = nameKw || bioKw;
+      if (matchedUserKeyword) {
+        matches.push({
+          type: "keywordUser",
+          user: userProfile,
+          keyword: matchedUserKeyword,
+          reason: `user keyword match: ${matchedUserKeyword}`,
+          severity: "medium",
+        });
+      }
+    }
 
     if (matches.length > 0) {
-      const groupDescriptions = matches.map(
-        (m) => `${m.name || m.groupId} (${m.groupId})`
-      );
-      const alertMsg = `${displayName || userId} is in blocked group${
-        matches.length > 1 ? "s" : ""
-      }: ${groupDescriptions.join(", ")}`;
+      const details = matches.map((m) => {
+        if (m.type === "blockedGroup") {
+          return `${m.group.name || m.group.groupId} (${
+            m.group.groupId
+          }) reason=${m.entry.reason || "n/a"} severity=${
+            m.entry.severity || "medium"
+          }`;
+        }
+        if (m.type === "keywordGroup") {
+          return `${m.group.name || m.group.groupId} (${
+            m.group.groupId
+          }) keyword=${m.keyword} severity=${m.severity}`;
+        }
+        if (m.type === "keywordUser") {
+          return `${m.user.displayName || userId} (${userId}) user_keyword=${
+            m.keyword
+          } severity=${m.severity}`;
+        }
+        return JSON.stringify(m);
+      });
+
+      const alertMsg = `${
+        displayName || userId
+      } matched blocked criteria: ${details.join("; ")}`;
 
       console.log(`⚠️ ALERT: ${alertMsg} (${userId})`);
       try {
-        windowsNotify(alertMsg);
+        windowsNotify(`${alertMsg}`);
       } catch (e) {
         logDebug("windowsNotify failed:", e && (e.stack || e.message || e));
       }
@@ -512,9 +670,9 @@ async function processPlayerJoin(userId, displayName) {
         logDebug("playAlertSound failed:", e && (e.stack || e.message || e));
       }
 
-      logDebug("Blocked group matches for", userId, matches);
+      logDebug("Blocked group/keyword matches for", userId, matches);
     } else {
-      logDebug("No blocked groups for", userId);
+      logDebug("No blocked groups/keywords for", userId);
     }
   } catch (e) {
     logDebug("Error in processPlayerJoin:", e && (e.stack || e.message || e));
@@ -905,23 +1063,97 @@ async function loadBlockedGroups() {
     );
   }
   try {
+    const bgText = (() => {
+      if (fs.existsSync(blockedGroupsPath))
+        return fs.readFileSync(blockedGroupsPath, "utf-8");
+      try {
+        return readBundledOrExternal(
+          "blockedGroups.jsonc",
+          '{"blockedGroups": []}'
+        );
+      } catch {
+        return '{"blockedGroups": []}';
+      }
+    })();
     try {
-      const bgText = (() => {
-        if (fs.existsSync(blockedGroupsPath))
-          return fs.readFileSync(blockedGroupsPath, "utf-8");
-        try {
-          return readBundledOrExternal(
-            "blockedGroups.jsonc",
-            '{"blockedGroups": []}'
-          );
-        } catch {
-          return '{"blockedGroups": []}';
+      const parsed = parse(bgText);
+ 
+      // If blockedGroups.jsonc contains an appVersion/version field, compare it to APP_VERSION
+      // and notify the user if the versions differ.
+      try {
+        const remoteVersion = parsed && (parsed.appVersion || parsed.version);
+        if (remoteVersion) {
+          await checkAppVersion(String(remoteVersion));
         }
-      })();
-      blockedGroups = parse(bgText).blockedGroups;
+      } catch (e) {
+        logDebug("App version check failed:", e && (e.message || e));
+      }
+ 
+      // If the blockedGroups.jsonc contains keyword blacklist or whitelist info,
+      // prefer those values over the config defaults.
+      if (parsed) {
+        if (Array.isArray(parsed.keywordBlacklist)) {
+          keywordBlacklist = parsed.keywordBlacklist;
+          // Compile user-provided patterns into RegExp objects (case-insensitive).
+          // Treat each entry in keywordBlacklist as a regex pattern string.
+          keywordRegexes = keywordBlacklist
+            .map((p) => {
+              try {
+                return new RegExp(p, "i");
+              } catch (e) {
+                logDebug(
+                  "Invalid keyword regex pattern in blockedGroups.jsonc:",
+                  p,
+                  e && (e.message || e)
+                );
+                return null;
+              }
+            })
+            .filter(Boolean);
+          logDebug(
+            "Loaded keywordBlacklist (compiled to regexes) from blockedGroups.jsonc:",
+            keywordBlacklist,
+            keywordRegexes.map((r) => r.source)
+          );
+        }
+        if (Array.isArray(parsed.whitelistGroupIds)) {
+          whitelistGroupIds = parsed.whitelistGroupIds;
+          logDebug(
+            "Loaded whitelistGroupIds from blockedGroups.jsonc:",
+            whitelistGroupIds
+          );
+        }
+        if (Array.isArray(parsed.whitelistUserIds)) {
+          whitelistUserIds = parsed.whitelistUserIds;
+          logDebug(
+            "Loaded whitelistUserIds from blockedGroups.jsonc:",
+            whitelistUserIds
+          );
+        }
+      }
+
+      const raw = Array.isArray(parsed.blockedGroups)
+        ? parsed.blockedGroups
+        : [];
+      // Normalize entries to objects: { groupId, reason, severity }
+      blockedGroups = raw
+        .map((entry) => {
+          if (typeof entry === "string") {
+            return { groupId: entry, reason: null, severity: "medium" };
+          }
+          if (entry && typeof entry === "object") {
+            return {
+              groupId: entry.groupId || entry.id || null,
+              reason: entry.reason || entry.note || null,
+              severity: entry.severity || "medium",
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
     } catch (e) {
       logDebug(
-        "Failed to load local blockedGroups.jsonc into memory:",
+        "Failed to parse local blockedGroups.jsonc into memory:",
         e && (e.stack || e.message || e)
       );
       blockedGroups = [];
