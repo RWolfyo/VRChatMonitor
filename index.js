@@ -1002,72 +1002,68 @@ async function loadBlockedGroups() {
                 localArray = [];
               }
             }
-            // Canonicalize arrays of blocked-group entries so comparison ignores
-            // ordering, harmless extra fields, and formatting/comment differences.
-            const canonicalizeList = (arr) => {
-              if (!Array.isArray(arr)) return "[]";
-              const normalized = arr
+            // Normalize relevant parts of remote/local configs and compare them.
+            // Comparison now considers:
+            // - blockedGroups entries (by groupId + stable fields)
+            // - keywordBlacklist
+            // - whitelistGroupIds
+            // - whitelistUserIds
+            // - appVersion / version
+            const normalizeConfig = (obj) => {
+              const parsedObj = obj || {};
+              const appVersion = parsedObj.appVersion || parsedObj.version || null;
+              const keywordBlacklistArr = Array.isArray(parsedObj.keywordBlacklist)
+                ? parsedObj.keywordBlacklist.slice().map(String).filter(Boolean).sort()
+                : [];
+              const whitelistGroupIdsArr = Array.isArray(parsedObj.whitelistGroupIds)
+                ? parsedObj.whitelistGroupIds.slice().map(String).filter(Boolean).sort()
+                : [];
+              const whitelistUserIdsArr = Array.isArray(parsedObj.whitelistUserIds)
+                ? parsedObj.whitelistUserIds.slice().map(String).filter(Boolean).sort()
+                : [];
+              const blockedRaw = Array.isArray(parsedObj.blockedGroups)
+                ? parsedObj.blockedGroups
+                : [];
+              const blockedNormalized = blockedRaw
                 .map((entry) => {
-                  if (typeof entry === "string") {
-                    return { groupId: entry };
-                  }
+                  if (typeof entry === "string") return { groupId: String(entry) };
                   if (!entry || typeof entry !== "object") return null;
                   return {
                     groupId: entry.groupId || entry.id || null,
+                    // we keep name/reason/severity for informational comparison
                     name: entry.name || entry.note || null,
                     reason: entry.reason || null,
                     severity: entry.severity || null,
                   };
                 })
                 .filter(Boolean)
-                .sort((a, b) => {
-                  const A = String(a.groupId || "").toLowerCase();
-                  const B = String(b.groupId || "").toLowerCase();
-                  if (A < B) return -1;
-                  if (A > B) return 1;
-                  return 0;
-                });
-              return JSON.stringify(normalized);
+                .sort((a, b) => String(a.groupId || "").localeCompare(String(b.groupId || "")));
+              return JSON.stringify({
+                appVersion,
+                keywordBlacklist: keywordBlacklistArr,
+                whitelistGroupIds: whitelistGroupIdsArr,
+                whitelistUserIds: whitelistUserIdsArr,
+                blockedGroups: blockedNormalized,
+              });
             };
  
-            const canonicalEqual = (a, b) => {
-              try {
-                return canonicalizeList(a) === canonicalizeList(b);
-              } catch (e) {
-                try {
-                  return JSON.stringify(a) === JSON.stringify(b);
-                } catch {
-                  return false;
-                }
-              }
-            };
+            // remoteParsed and localParsed exist earlier in this function's scope.
+            const remoteCanonical = normalizeConfig(remoteParsed || {});
+            const localCanonical = normalizeConfig(localParsed || {});
  
-            if (canonicalEqual(remoteArray, localArray)) {
-              logDebug(
-                "Remote blockedGroups identical to local; no update needed."
-              );
+            if (remoteCanonical === localCanonical) {
+              logDebug("Remote blockedGroups/config identical to local; no update needed.");
             } else {
               try {
                 try {
                   fs.writeFileSync(blockedGroupsPath, text);
-                  console.log(
-                    "💾 blockedGroups.jsonc updated from remote source."
-                  );
-                  logDebug(
-                    "blockedGroups.jsonc updated from",
-                    blockedGroupsRemoteUrl
-                  );
+                  console.log("💾 blockedGroups.jsonc updated from remote source.");
+                  logDebug("blockedGroups.jsonc updated from", blockedGroupsRemoteUrl);
                 } catch (e) {
-                  logDebug(
-                    "Failed to write updated blockedGroups.jsonc:",
-                    e && (e.stack || e.message || e)
-                  );
+                  logDebug("Failed to write updated blockedGroups.jsonc:", e && (e.stack || e.message || e));
                 }
               } catch (e) {
-                logDebug(
-                  "Failed to write updated blockedGroups.jsonc:",
-                  e && (e.stack || e.message || e)
-                );
+                logDebug("Failed to write updated blockedGroups.jsonc:", e && (e.stack || e.message || e));
               }
             }
           } else {
