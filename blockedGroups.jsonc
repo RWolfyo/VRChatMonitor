@@ -10,7 +10,6 @@
     // - Escape backslashes (\\) since this is a JSON string.
     // - "\\bduskview\\b" matches "Duskview" as a whole word, not "duskviewing".
     // - "\\bduskview\\s*city\\b" matches "Duskview City" or "DuskviewCity" (with optional space).
-    "\\bduskview\\b",
     "\\bduskview\\s*city\\b"
   ],
   "whitelistGroupIds": [
@@ -18,7 +17,8 @@
     // - When a groupId is whitelisted, the group will never trigger alerts.
     // - Other checks (user keyword, other groups) still apply.
     "grp_0394e45a-8411-4cae-82c2-91f6198812a0", // The Faded Feline
-    "grp_6ba425c5-f34e-43c9-a48e-6dc725942358" // Real Duskview City Staff
+    "grp_6ba425c5-f34e-43c9-a48e-6dc725942358", // Real Duskview City Staff
+    "grp_14e6811e-a9bd-4b24-ae90-95762e07deba" // Duskview City (official)
   ],
   "whitelistUserIds": [
     // Example user whitelist entries — users here will be completely skipped:
