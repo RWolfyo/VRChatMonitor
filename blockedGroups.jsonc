@@ -18,8 +18,7 @@
     // - When a groupId is whitelisted, the group will never trigger alerts.
     // - Other checks (user keyword, other groups) still apply.
     "grp_0394e45a-8411-4cae-82c2-91f6198812a0", // The Faded Feline
-    "",
-    ""
+    "grp_6ba425c5-f34e-43c9-a48e-6dc725942358" // Real Duskview City Staff
   ],
   "whitelistUserIds": [
     // Example user whitelist entries — users here will be completely skipped:
