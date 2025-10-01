@@ -18,7 +18,8 @@
     // - Other checks (user keyword, other groups) still apply.
     "grp_0394e45a-8411-4cae-82c2-91f6198812a0", // The Faded Feline
     "grp_6ba425c5-f34e-43c9-a48e-6dc725942358", // Real Duskview City Staff
-    "grp_14e6811e-a9bd-4b24-ae90-95762e07deba" // Duskview City (official)
+    "grp_14e6811e-a9bd-4b24-ae90-95762e07deba", // Duskview City (official)
+    "grp_5c438d5d-a8ad-4963-a9c3-1df8f44719b6" // Duskview City VIP
   ],
   "whitelistUserIds": [
     // Example user whitelist entries — users here will be completely skipped:
