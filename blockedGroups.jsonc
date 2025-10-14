@@ -547,6 +547,12 @@
       "name": "Fake DCN Staff",
       "reason": "Fake DCN Staff",
       "severity": "SEVERE KICK/BAN"
+    },
+    {
+      "groupId": "grp_0d5f4042-387b-47e4-9fd7-748b90c6bd77",
+      "name": "Laughing Coffin",
+      "reason": "malicious group",
+      "severity": "medium"
     }
   ]
 }
