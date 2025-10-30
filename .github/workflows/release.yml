@@ -1,0 +1,200 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v2.0.0
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v2.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build-and-release:
+    name: Build Windows x64 and Create Release
+    runs-on: windows-latest
+    permissions:
+      contents: write  # Required for creating releases
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for changelog
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Python (for ffplay download)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build executable
+        run: |
+          echo "Building VRChat Monitor v2..."
+          npm run build
+
+      - name: Verify build outputs
+        shell: pwsh
+        run: |
+          Write-Host "Checking build artifacts..."
+          if (-not (Test-Path "dist\vrc-monitor-v2.exe")) {
+            Write-Error "Executable not found!"
+            exit 1
+          }
+          if (-not (Test-Path "build\vendor\SnoreToast.exe")) {
+            Write-Warning "SnoreToast.exe not found"
+          }
+          if (-not (Test-Path "build\vendor\ffplay.exe")) {
+            Write-Warning "ffplay.exe not found"
+          }
+          Write-Host "Build verification complete!"
+
+      - name: Prepare release package
+        shell: pwsh
+        run: |
+          Write-Host "Preparing release package..."
+
+          $zipName = "vrc-monitor-v2-windows-x64.zip"
+
+          # The SEA build script already creates dist/vrc-monitor-v2/ with all files
+          # Just verify it exists
+          if (-not (Test-Path "dist\vrc-monitor-v2")) {
+            Write-Error "Build directory not found!"
+            exit 1
+          }
+
+          Write-Host "Release package directory ready at: dist\vrc-monitor-v2\"
+
+          # Copy documentation
+          Write-Host "Copying documentation..."
+          Copy-Item -Path "README.md" -Destination "dist\vrc-monitor-v2\README.md" -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "LICENSE" -Destination "dist\vrc-monitor-v2\LICENSE" -Force -ErrorAction SilentlyContinue
+
+          # Create quick start guide for release
+          @"
+          # VRChat Monitor v2 - Quick Start
+
+          ## Installation
+
+          1. Extract all files from this ZIP to a location of your choice
+          2. Run vrc-monitor-v2.exe
+          3. Enter your VRChat credentials when prompted
+
+          ## What's in this package?
+
+          - vrc-monitor-v2.exe - Main application
+          - config.json - Configuration file
+          - blocklist.db - SQLite blocklist database (86+ groups)
+          - alert.mp3 - Alert sound
+          - native/ - Native binary modules
+          - vendor/ - External binaries (SnoreToast, ffplay)
+
+          ## Requirements
+
+          - Windows 10/11 (64-bit)
+          - VRChat installed
+
+          ## Testing
+
+          Test all notification channels with:
+          vrc-monitor-v2.exe --test-alert
+
+          ## Documentation
+
+          See README.md for full documentation and configuration options.
+
+          ## Support
+
+          https://github.com/${{ github.repository }}
+          "@ | Out-File -FilePath "dist\vrc-monitor-v2\QUICK_START.txt" -Encoding UTF8
+
+          # Create ZIP archive with contents directly (no nested folder)
+          Write-Host "Creating ZIP archive..."
+          if (Test-Path $zipName) { Remove-Item $zipName -Force }
+
+          # Change to the directory and zip its contents (not the directory itself)
+          Push-Location "dist\vrc-monitor-v2"
+          Compress-Archive -Path "*" -DestinationPath "..\..\$zipName" -CompressionLevel Optimal -Force
+          Pop-Location
+
+          Write-Host "✓ Release package created!"
+          Write-Host "  Location: $zipName"
+          Write-Host "  Files will extract directly (no nested folder)"
+
+      - name: Get version from tag or input
+        id: get_version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ inputs.version }}"
+          } else {
+            $version = "${{ github.ref_name }}"
+          }
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "Version: $version"
+
+      - name: Generate changelog
+        id: changelog
+        shell: pwsh
+        run: |
+          Write-Host "Generating release notes from template..."
+
+          # Get version
+          $version = "${{ steps.get_version.outputs.version }}"
+
+          # Get commits since last tag
+          $lastTag = git describe --tags --abbrev=0 HEAD^ 2>$null
+          if ($lastTag) {
+            $commits = git log "$lastTag..HEAD" --pretty=format:"- %s (%h)" --no-merges
+            Write-Host "Changes since $lastTag"
+          } else {
+            $commits = git log --pretty=format:"- %s (%h)" --no-merges -n 20
+            Write-Host "Recent commits (no previous tag found)"
+          }
+
+          # Read template
+          $template = Get-Content -Path ".github\RELEASE_NOTES_TEMPLATE.md" -Raw
+
+          # Replace placeholders
+          $releaseNotes = $template `
+            -replace '\{VERSION\}', $version `
+            -replace '\{CHANGELOG\}', $commits `
+            -replace '\{REPO\}', '${{ github.repository }}'
+
+          # Save to file (this will be used by the release action)
+          $releaseNotes | Out-File -FilePath "RELEASE_NOTES.md" -Encoding UTF8
+
+          Write-Host "✓ Release notes generated"
+          Write-Host "Release notes saved to RELEASE_NOTES.md"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: VRChat Monitor v2 ${{ steps.get_version.outputs.version }}
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+          make_latest: true
+          generate_release_notes: false
+          files: |
+            vrc-monitor-v2-windows-x64.zip
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vrc-monitor-v2-${{ steps.get_version.outputs.version }}
+          path: |
+            vrc-monitor-v2-windows-x64.zip
+            RELEASE_NOTES.md
+          retention-days: 30

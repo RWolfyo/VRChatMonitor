@@ -1,0 +1,144 @@
+name: Build Test
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  test-build:
+    name: Test Build (Windows x64)
+    runs-on: windows-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip-ci]') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Python (for ffplay download)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run type check
+        run: npm run type-check
+        continue-on-error: true
+
+      - name: Build executable
+        run: npm run build
+
+      - name: Verify build outputs
+        shell: pwsh
+        run: |
+          Write-Host "Verifying build outputs..."
+
+          # Check executable
+          if (-not (Test-Path "dist\vrc-monitor-v2.exe")) {
+            Write-Error "❌ Executable not found at dist\vrc-monitor-v2.exe"
+            exit 1
+          }
+          Write-Host "✓ Executable found"
+
+          # Check bundle
+          if (-not (Test-Path "build\index.js")) {
+            Write-Error "❌ Bundle not found at build\index.js"
+            exit 1
+          }
+          Write-Host "✓ Bundle found"
+
+          # Check assets
+          $assets = @(
+            "build\config.json",
+            "build\blocklist.db",
+            "build\alert.mp3"
+          )
+
+          foreach ($asset in $assets) {
+            if (Test-Path $asset) {
+              Write-Host "✓ Found: $asset"
+            } else {
+              Write-Warning "⚠ Missing: $asset"
+            }
+          }
+
+          # Check vendor binaries
+          if (Test-Path "build\vendor\SnoreToast.exe") {
+            Write-Host "✓ SnoreToast.exe found"
+          } else {
+            Write-Warning "⚠ SnoreToast.exe not found"
+          }
+
+          if (Test-Path "build\vendor\ffplay.exe") {
+            Write-Host "✓ ffplay.exe found"
+          } else {
+            Write-Warning "⚠ ffplay.exe not found"
+          }
+
+          Write-Host ""
+          Write-Host "✅ Build verification complete!"
+
+      - name: Prepare test package
+        shell: pwsh
+        run: |
+          Write-Host "Preparing test package..."
+
+          # The SEA build script already creates dist/vrc-monitor-v2/ with everything
+          # Just verify it exists
+          if (-not (Test-Path "dist\vrc-monitor-v2")) {
+            Write-Error "Build directory not found!"
+            exit 1
+          }
+
+          # Copy documentation for test package
+          Copy-Item -Path "README.md" -Destination "dist\vrc-monitor-v2\README.md" -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "LICENSE" -Destination "dist\vrc-monitor-v2\LICENSE" -Force -ErrorAction SilentlyContinue
+
+          # Create test package info
+          @"
+          VRChat Monitor v2 - Test Build
+
+          Build: ${{ github.sha }}
+          Branch: ${{ github.ref_name }}
+          Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
+
+          This is a test build. For stable releases, see: https://github.com/${{ github.repository }}/releases
+          "@ | Out-File -FilePath "dist\vrc-monitor-v2\BUILD_INFO.txt" -Encoding UTF8
+
+          Write-Host "✓ Test package ready at: dist\vrc-monitor-v2\"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vrc-monitor-v2-test-${{ github.sha }}
+          path: dist/vrc-monitor-v2/
+          retention-days: 7
+
+      - name: Build summary
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "Build Summary"
+          Write-Host "=========================================="
+          Write-Host "Commit: ${{ github.sha }}"
+          Write-Host "Branch: ${{ github.ref_name }}"
+          Write-Host "Artifact: vrc-monitor-v2-test-${{ github.sha }}"
+          Write-Host "Note: Artifact will be automatically zipped by GitHub Actions"
+          Write-Host "=========================================="

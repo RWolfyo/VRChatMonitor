@@ -1,8 +1,0 @@
-{
-  "discordWebhook": "",
-  "debug": false,
-  "playSound": true,
-  "playVolume": 0.5,
-  "blockedGroupsAutoUpdate": true,
-  "blockedGroupsRemoteUrl": "https://raw.githubusercontent.com/RWolfyo/VRChatMonitor/refs/heads/master/blockedGroups.jsonc"
-}

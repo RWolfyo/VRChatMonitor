@@ -1,123 +1,162 @@
-# VRChat Instance Monitor
+# VRChat Monitor v2
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-VRChat Instance Monitor is a small Node.js CLI utility that watches a local VRChat instance log for player join events, checks joined players' VRChat groups against a configurable blocklist, and emits desktop notifications, optional sound, and Discord webhook alerts when a blocked-group member joins. It is designed to run from source or be packaged into a single Windows executable.
+**Advanced VRChat Instance Monitoring & Moderation Tool**
 
-## Table of Contents
+Real-time monitoring of VRChat instances with SQLite blocklist checking and multi-channel alerts (Desktop, Discord, Audio, VR Overlay).
 
-- [Features](#features)
-- [Prerequisites](#prerequisites)
-- [Installation and Setup](#installation-and-setup)
-  - [Node.js (npm)](#nodejs-npm)
-  - [Node.js (yarn)](#nodejs-yarn)
-- [Configuration](#configuration)
-- [Scripts Summary](#scripts-summary)
-- [CI/CD](#ci-cd)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
-- [Contact](#contact)
+## ✨ Features
 
-## Features
+- 🔍 **Real-time Log Monitoring** - Automatically detects player join/leave events
+- 🚫 **SQLite Blocklist System** - Fast, indexed database with 86+ groups
+- 🔄 **Auto-updating Blocklists** - Fetches updates from remote sources
+- 🔔 **Multi-Channel Alerts**:
+  - Desktop notifications (Windows toast)
+  - Discord webhooks with rich embeds
+  - Audio alerts (FFmpeg)
+  - VR overlay (VRCX & XSOverlay)
+- 🔐 **Full 2FA Support** - TOTP, OTP, Email verification
+- 💾 **Session Persistence** - SQLite-based session storage
+- 📦 **Single Executable** - Node.js SEA packaging
 
-- Watches VRChat `output_log*.txt` to detect player join/leave events.
-- Authenticates with VRChat API and inspects user groups.
-- Compares user groups to a maintained `blockedGroups` list and alerts on matches.
-- Desktop notifications (Windows via `node-notifier` / SnoreToast).
-- Optional Discord webhook notifications.
-- Plays a packaged `alert.mp3` via bundled `ffplay` when available.
-- Can be bundled with [`esbuild`] and packaged to an exe with [`pkg`].
+## 📋 Requirements
 
-## Prerequisites
+- **Windows 10/11** (64-bit)
+- **VRChat** installed and running
+- **VRChat Account** with credentials
 
-- Node.js 18.x (LTS recommended)  
-  - Verify: 
-```bash
-node --version
-```
-- npm (included with Node.js) or Yarn (classic)
-- Optional for packaging to Windows exe: `pkg` (already in devDependencies in [`package.json`])
-- Optional for sound/notifications:
-  - `vendor/SnoreToast.exe` (Windows notifications fallback)
-  - `vendor/ffplay` / `vendor/ffplay.exe` (sound playback)
-- Docker (optional)
+## 🚀 Quick Start
 
-## Installation and Setup
+### Download & Run
 
-### Node.js (npm)
+1. **Download** the latest release from [Releases](../../releases)
+2. **Extract** the archive
+3. **Run** `vrc-monitor-v2.exe`
+4. **Login** when prompted (credentials saved for next time)
 
-- Unix / macOS
-```bash
-git clone https://github.com/RWolfyo/VRChatMonitor.git
-cd VRChatMonitor
-npm install
-```
-
-- Windows (cmd.exe / PowerShell)
-```bash
-git clone https://github.com/RWolfyo/VRChatMonitor.git
-cd VRChatMonitor
-npm install
-```
-
-### Node.js (yarn)
+### First Run
 
 ```bash
-git clone https://github.com/RWolfyo/VRChatMonitor.git
-cd VRChatMonitor
-yarn install
+# The app will prompt you for:
+Username: your_vrchat_username
+Password: ********
+2FA Code: 123456  # If 2FA enabled
 ```
 
-## Configuration
+Your credentials and session are saved automatically. On subsequent runs, you'll be logged in instantly.
 
-The app reads defaults from [`config.json`]. You may override settings by editing that file.
+### Testing Notifications
 
-## Scripts Summary
+Before relying on the monitor, test all your configured notification channels:
 
-| Script | Command |
-|---|---|
-| build | `npm run build` — bundle + package (creates `dist/vrc-monitor.exe`) |
-| build:bundle | `esbuild` to produce `build/index.cjs` |
-| build:pkg | `pkg` to produce Windows exe |
+```bash
+vrc-monitor-v2.exe --test-alert
+```
 
-### CI/CD
+This will:
+- ✅ Send test alerts to ALL configured channels (Desktop, Discord, Audio, VR)
+- 📊 Show which channels are enabled/disabled
+- 🔍 Verify Discord webhooks and other integrations work
+- 🎵 Test audio volume levels
+- ⏱️ Exit automatically after 3 seconds
 
-The repo already includes a Windows build-and-release workflow at [`.github/workflows/build-release.yml`] which:
-- checks out code
-- sets up Node.js 18
-- installs dependencies
-- runs `npm run build` to produce `dist/vrc-monitor.exe`
-- packages artifacts into a ZIP and publishes a GitHub Release
+**Tip:** Run this after configuring Discord webhooks or changing notification settings to ensure everything works!
 
-## Troubleshooting
+## ⚙️ Configuration
 
-- Login or session issues:
-  - Remove `session.json` located next to the executable or in the project root and re-run the login flow.
-- No sound:
-  - Ensure `alert.mp3` and `vendor/ffplay` or `vendor/ffplay.exe` exist next to the exe.
-- Notifications not shown on Windows:
-  - Ensure `vendor/SnoreToast.exe` is present or that `node-notifier` vendor files are included.
-- Block list not updating:
-  - Check `blockedGroupsRemoteUrl` in [`config.json`] and network access.
-- Log detection fails:
-  - The app auto-detects VRChat log directories; enable debug mode to see detection attempts and errors in `debug.log`.
+Edit `config.json` to enable features:
 
-## Contributing
+```json
+{
+  "vrchat": {
+    "username": "",  // Optional: pre-fill or leave empty to prompt
+    "password": ""
+  },
+  "notifications": {
+    "desktop": { "enabled": true, "sound": true },
+    "discord": { "enabled": false, "webhookUrl": "" },
+    "vrcx": { "enabled": false, "xsOverlay": false }
+  },
+  "audio": { "enabled": true, "volume": 0.5 },
+  "blocklist": {
+    "autoUpdate": true,
+    "remoteUrl": "https://example.com/blocklist.db",
+    "updateInterval": 60
+  }
+}
+```
 
-- Issues: open with reproduction steps, Node.js version, platform, and expected behavior.
-- Pull requests:
-  - Fork → branch → PR to `master`.
-  - Keep PRs small and testable.
-- Code style:
-  - ES modules; consider adding ESLint + Prettier.
-- Commit messages:
-  - Prefer Conventional Commits: `feat/auth: add 2FA retry` or `fix(play): correct ffplay lookup`.
+See **[Configuration Guide](docs/CONFIGURATION.md)** for all options.
 
-## License
+## 📚 Documentation
 
-This project is licensed under the MIT License. See [`LICENSE`](LICENSE).
+- **[Setup Guide](docs/SETUP.md)** - Installation, configuration, Discord webhooks, VR overlays
+- **[Configuration Reference](docs/CONFIGURATION.md)** - All config options explained
+- **[Blocklist Management](docs/BLOCKLIST.md)** - SQLite database schema and management
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Building from Source](docs/BUILDING.md)** - Developer build instructions
 
-## Contact
+## 🔄 How It Works
 
-- Maintainer: Wolfyo
+1. Monitors VRChat log files for player join events
+2. Fetches player's groups via VRChat API (cached)
+3. Checks against SQLite blocklist database
+4. Sends alerts to all enabled channels if matched
+5. Auto-updates blocklist periodically
+
+## 🛠️ Technology Stack
+
+- **TypeScript 5.7** + **Node.js 22+**
+- **SQLite** (better-sqlite3) - Blocklist & session storage
+- **vrchat@2.20.4** - Official VRChat API
+- **Node.js SEA** - Single Executable Application
+
+## 🐛 Troubleshooting
+
+### Quick Fixes
+
+- **Session issues**: Delete `.cache/session.sqlite` and re-login
+- **Authentication failed**: Verify credentials, check 2FA code
+- **No logs detected**: Ensure VRChat is running and installed in default location
+
+See **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** for detailed solutions.
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/RWolfyo/VRChatMonitor/issues)
+- **Documentation**: See `docs/` folder
+
+## 🎯 Roadmap
+
+### ✅ Completed (v2.0.0)
+- Complete TypeScript rewrite
+- SQLite blocklist with auto-updates
+- User blocklist checking (block individual users)
+- Node.js SEA packaging
+- VRChat API with session persistence
+- Multi-channel notifications (Desktop, Discord, Audio, VR)
+- VRCX & XSOverlay VR overlay integration
+
+### 📋 Planned
+- Blocklist management web dashboard
+
+## 🙏 Credits
+
+- Built on [VRChatMonitor](https://github.com/RWolfyo/VRChatMonitor)
+- [vrchat@2.20.4](https://www.npmjs.com/package/vrchat) from [vrchat.community](https://vrchat.community/javascript)
+- [better-sqlite3](https://www.npmjs.com/package/better-sqlite3)
+- [FFmpeg](https://ffmpeg.org/), [SnoreToast](https://github.com/KDE/snoretoast)
+- Inspired by [VRCX](https://github.com/vrcx-team/VRCX)
+
+## 📜 License
+
+MIT License - See [LICENSE](LICENSE)
+
+## ⚠️ Disclaimer
+
+VRChat Monitor v2 is not endorsed by VRChat and does not reflect the views of VRChat Inc. Uses VRChat API in accordance with their Terms of Service.
+
+---
+
+**Made with ❤️ for the VRChat community**

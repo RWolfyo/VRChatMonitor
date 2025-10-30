@@ -1,0 +1,39 @@
+{
+  "vrchat": {
+    "username": "",
+    "password": ""
+  },
+  "notifications": {
+    "desktop": {
+      "enabled": true,
+      "sound": true
+    },
+    "discord": {
+      "enabled": false,
+      "webhookUrl": "",
+      "mentionRoles": []
+    },
+    "vrcx": {
+      "enabled": false,
+      "xsOverlay": false
+    }
+  },
+  "audio": {
+    "enabled": true,
+    "volume": 0.4,
+    "filePath": ""
+  },
+  "blocklist": {
+    "autoUpdate": true,
+    "remoteUrl": "https://vrcm.winter.tf/blocklist.db",
+    "updateInterval": 60
+  },
+  "logging": {
+    "level": "info",
+    "file": false
+  },
+  "advanced": {
+    "cacheDir": "",
+    "deduplicateWindow": 30
+  }
+}
