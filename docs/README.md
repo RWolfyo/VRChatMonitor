@@ -194,5 +194,5 @@ See [Building Guide](BUILDING.md) for development setup and contribution guideli
 
 ---
 
-**Version**: 2.0.1
+**Version**: 2.0.2
 **Last Updated**: 2025-11-02
