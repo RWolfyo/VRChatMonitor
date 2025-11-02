@@ -1,6 +1,6 @@
 # Release Process
 
-This document describes how to create releases for VRChat Monitor v2.
+This document describes how to create releases for VRChat Monitor.
 
 ## Automated Release Workflow
 
@@ -39,23 +39,22 @@ The project uses GitHub Actions to automatically build and release the Windows x
 
 ### Release Package Contents
 
-The automated release creates `vrc-monitor-v2-windows-x64.zip` containing:
+The automated release creates `vrc-monitor-windows-x64.zip` containing:
 
 ```
-vrc-monitor-v2/
-├── vrc-monitor-v2.exe          # 38 MB - Main executable
+vrc-monitor/
+├── vrc-monitor.exe             # Main executable
 ├── config.json                 # Configuration
-├── blockedGroups.jsonc         # Blocklist database (90+ groups)
+├── blocklist.db                # SQLite blocklist database (86+ groups)
 ├── alert.mp3                   # Alert sound
-├── README_RELEASE.txt          # User documentation
-├── README.md                   # Full documentation
-├── LICENSE                     # License file
-└── vendor/
-    ├── SnoreToast.exe         # Desktop notifications (2.5 MB)
-    └── ffplay.exe             # Audio playback (17 MB)
+├── lib/better-sqlite3/         # Native modules
+├── vendor/                     # External binaries
+│   ├── SnoreToast.exe
+│   └── ffplay.exe
+├── README.md                   # Main documentation
 ```
 
-**Total Size**: ~57 MB
+**Total Size**: ~40 MB
 
 ### Workflow Features
 
@@ -104,12 +103,12 @@ git commit -m "Update docs [skip-ci]"
 #### Local Testing
 
 ```bash
-# Build locally
+# Build locally (Windows with Node.js 22+)
 npm run build
 
 # Test the executable
-cd release/vrc-monitor-v2
-./vrc-monitor-v2.exe
+cd dist/vrc-monitor
+./vrc-monitor.exe
 ```
 
 #### GitHub Testing
@@ -169,10 +168,10 @@ If the automated workflow fails:
 2. **Create release package**:
    ```bash
    # Windows
-   Compress-Archive -Path release/vrc-monitor-v2/* -DestinationPath vrc-monitor-v2-windows-x64.zip
+   Compress-Archive -Path dist/vrc-monitor/* -DestinationPath vrc-monitor-windows-x64.zip
 
    # Linux/Mac
-   cd release && zip -r ../vrc-monitor-v2-windows-x64.zip vrc-monitor-v2/
+   cd dist && zip -r ../vrc-monitor-windows-x64.zip vrc-monitor/
    ```
 
 3. **Create release manually**:

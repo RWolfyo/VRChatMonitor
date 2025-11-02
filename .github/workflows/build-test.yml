@@ -49,8 +49,8 @@ jobs:
           Write-Host "Verifying build outputs..."
 
           # Check executable
-          if (-not (Test-Path "dist\vrc-monitor-v2.exe")) {
-            Write-Error "❌ Executable not found at dist\vrc-monitor-v2.exe"
+          if (-not (Test-Path "dist\vrc-monitor.exe")) {
+            Write-Error "❌ Executable not found at dist\vrc-monitor.exe"
             exit 1
           }
           Write-Host "✓ Executable found"
@@ -98,36 +98,37 @@ jobs:
         run: |
           Write-Host "Preparing test package..."
 
-          # The SEA build script already creates dist/vrc-monitor-v2/ with everything
+          # The SEA build script already creates dist/vrc-monitor/ with everything
           # Just verify it exists
-          if (-not (Test-Path "dist\vrc-monitor-v2")) {
+          if (-not (Test-Path "dist\vrc-monitor")) {
             Write-Error "Build directory not found!"
             exit 1
           }
 
           # Copy documentation for test package
-          Copy-Item -Path "README.md" -Destination "dist\vrc-monitor-v2\README.md" -Force -ErrorAction SilentlyContinue
-          Copy-Item -Path "LICENSE" -Destination "dist\vrc-monitor-v2\LICENSE" -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "README.md" -Destination "dist\vrc-monitor\README.md" -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "LICENSE" -Destination "dist\vrc-monitor\LICENSE" -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "docs\COMMANDS.md" -Destination "dist\vrc-monitor\COMMANDS.md" -Force -ErrorAction SilentlyContinue
 
           # Create test package info
           @"
-          VRChat Monitor v2 - Test Build
+          VRChat Monitor - Test Build
 
           Build: ${{ github.sha }}
           Branch: ${{ github.ref_name }}
           Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
 
           This is a test build. For stable releases, see: https://github.com/${{ github.repository }}/releases
-          "@ | Out-File -FilePath "dist\vrc-monitor-v2\BUILD_INFO.txt" -Encoding UTF8
+          "@ | Out-File -FilePath "dist\vrc-monitor\BUILD_INFO.txt" -Encoding UTF8
 
-          Write-Host "✓ Test package ready at: dist\vrc-monitor-v2\"
+          Write-Host "✓ Test package ready at: dist\vrc-monitor\"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: vrc-monitor-v2-test-${{ github.sha }}
-          path: dist/vrc-monitor-v2/
+          name: vrc-monitor-test-${{ github.sha }}
+          path: dist/vrc-monitor/
           retention-days: 7
 
       - name: Build summary
@@ -139,6 +140,6 @@ jobs:
           Write-Host "=========================================="
           Write-Host "Commit: ${{ github.sha }}"
           Write-Host "Branch: ${{ github.ref_name }}"
-          Write-Host "Artifact: vrc-monitor-v2-test-${{ github.sha }}"
+          Write-Host "Artifact: vrc-monitor-test-${{ github.sha }}"
           Write-Host "Note: Artifact will be automatically zipped by GitHub Actions"
           Write-Host "=========================================="

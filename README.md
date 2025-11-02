@@ -1,4 +1,4 @@
-# VRChat Monitor v2
+# VRChat Monitor
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -32,7 +32,7 @@ Real-time monitoring of VRChat instances with SQLite blocklist checking and mult
 
 1. **Download** the latest release from [Releases](../../releases)
 2. **Extract** the archive
-3. **Run** `vrc-monitor-v2.exe`
+3. **Run** `vrc-monitor.exe`
 4. **Login** when prompted (credentials saved for next time)
 
 ### First Run
@@ -46,22 +46,28 @@ Password: ********
 
 Your credentials and session are saved automatically. On subsequent runs, you'll be logged in instantly.
 
-### Testing Notifications
+### Interactive Commands
 
-Before relying on the monitor, test all your configured notification channels:
+The app features an interactive command system. Once started, type commands at the prompt:
 
 ```bash
-vrc-monitor-v2.exe --test-alert
+vrc-monitor> help          # Show all available commands
+vrc-monitor> test-alert    # Test all notification channels
+vrc-monitor> status        # Show monitor status
+vrc-monitor> quit          # Exit the application
 ```
 
-This will:
-- ✅ Send test alerts to ALL configured channels (Desktop, Discord, Audio, VR)
-- 📊 Show which channels are enabled/disabled
-- 🔍 Verify Discord webhooks and other integrations work
-- 🎵 Test audio volume levels
-- ⏱️ Exit automatically after 3 seconds
+**Available Commands:**
+- `help` - Show all commands
+- `test-alert` - Test all notification channels (Desktop, Discord, Audio, VR)
+- `status` - Display monitor status and blocklist stats
+- `update-blocklist` - Force update blocklist from remote
+- `clear` - Clear console screen
+- `restart` - Restart the monitor
+- `version` - Show app version
+- `quit` - Exit
 
-**Tip:** Run this after configuring Discord webhooks or changing notification settings to ensure everything works!
+See **[Commands Reference](docs/COMMANDS.md)** for detailed documentation.
 
 ## ⚙️ Configuration
 
@@ -91,6 +97,7 @@ See **[Configuration Guide](docs/CONFIGURATION.md)** for all options.
 
 ## 📚 Documentation
 
+- **[Interactive Commands](docs/COMMANDS.md)** - Command system reference
 - **[Setup Guide](docs/SETUP.md)** - Installation, configuration, Discord webhooks, VR overlays
 - **[Configuration Reference](docs/CONFIGURATION.md)** - All config options explained
 - **[Blocklist Management](docs/BLOCKLIST.md)** - SQLite database schema and management
@@ -129,7 +136,7 @@ See **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** for detailed solutions.
 
 ## 🎯 Roadmap
 
-### ✅ Completed (v2.0.0)
+### ✅ Completed
 - Complete TypeScript rewrite
 - SQLite blocklist with auto-updates
 - User blocklist checking (block individual users)
@@ -137,6 +144,7 @@ See **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** for detailed solutions.
 - VRChat API with session persistence
 - Multi-channel notifications (Desktop, Discord, Audio, VR)
 - VRCX & XSOverlay VR overlay integration
+- Interactive command system
 
 ### 📋 Planned
 - Blocklist management web dashboard
@@ -155,7 +163,7 @@ MIT License - See [LICENSE](LICENSE)
 
 ## ⚠️ Disclaimer
 
-VRChat Monitor v2 is not endorsed by VRChat and does not reflect the views of VRChat Inc. Uses VRChat API in accordance with their Terms of Service.
+VRChat Monitor is not endorsed by VRChat and does not reflect the views of VRChat Inc. Uses VRChat API in accordance with their Terms of Service.
 
 ---
 

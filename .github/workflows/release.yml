@@ -40,14 +40,14 @@ jobs:
 
       - name: Build executable
         run: |
-          echo "Building VRChat Monitor v2..."
+          echo "Building VRChat Monitor..."
           npm run build
 
       - name: Verify build outputs
         shell: pwsh
         run: |
           Write-Host "Checking build artifacts..."
-          if (-not (Test-Path "dist\vrc-monitor-v2.exe")) {
+          if (-not (Test-Path "dist\vrc-monitor.exe")) {
             Write-Error "Executable not found!"
             exit 1
           }
@@ -64,39 +64,40 @@ jobs:
         run: |
           Write-Host "Preparing release package..."
 
-          $zipName = "vrc-monitor-v2-windows-x64.zip"
+          $zipName = "vrc-monitor-windows-x64.zip"
 
-          # The SEA build script already creates dist/vrc-monitor-v2/ with all files
+          # The SEA build script already creates dist/vrc-monitor/ with all files
           # Just verify it exists
-          if (-not (Test-Path "dist\vrc-monitor-v2")) {
+          if (-not (Test-Path "dist\vrc-monitor")) {
             Write-Error "Build directory not found!"
             exit 1
           }
 
-          Write-Host "Release package directory ready at: dist\vrc-monitor-v2\"
+          Write-Host "Release package directory ready at: dist\vrc-monitor\"
 
           # Copy documentation
           Write-Host "Copying documentation..."
-          Copy-Item -Path "README.md" -Destination "dist\vrc-monitor-v2\README.md" -Force -ErrorAction SilentlyContinue
-          Copy-Item -Path "LICENSE" -Destination "dist\vrc-monitor-v2\LICENSE" -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "README.md" -Destination "dist\vrc-monitor\README.md" -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "LICENSE" -Destination "dist\vrc-monitor\LICENSE" -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "docs\COMMANDS.md" -Destination "dist\vrc-monitor\COMMANDS.md" -Force -ErrorAction SilentlyContinue
 
           # Create quick start guide for release
           @"
-          # VRChat Monitor v2 - Quick Start
+          # VRChat Monitor - Quick Start
 
           ## Installation
 
           1. Extract all files from this ZIP to a location of your choice
-          2. Run vrc-monitor-v2.exe
+          2. Run vrc-monitor.exe
           3. Enter your VRChat credentials when prompted
 
           ## What's in this package?
 
-          - vrc-monitor-v2.exe - Main application
+          - vrc-monitor.exe - Main application
           - config.json - Configuration file
           - blocklist.db - SQLite blocklist database (86+ groups)
           - alert.mp3 - Alert sound
-          - native/ - Native binary modules
+          - lib/ - Native binary modules
           - vendor/ - External binaries (SnoreToast, ffplay)
 
           ## Requirements
@@ -104,10 +105,15 @@ jobs:
           - Windows 10/11 (64-bit)
           - VRChat installed
 
-          ## Testing
+          ## Interactive Commands
 
-          Test all notification channels with:
-          vrc-monitor-v2.exe --test-alert
+          The app now has an interactive command system! When you start it, type:
+          - help - Show all available commands
+          - test-alert - Test all notification channels
+          - status - Check monitor status
+          - quit - Exit the application
+
+          See COMMANDS.md for full command reference.
 
           ## Documentation
 
@@ -116,14 +122,14 @@ jobs:
           ## Support
 
           https://github.com/${{ github.repository }}
-          "@ | Out-File -FilePath "dist\vrc-monitor-v2\QUICK_START.txt" -Encoding UTF8
+          "@ | Out-File -FilePath "dist\vrc-monitor\QUICK_START.txt" -Encoding UTF8
 
           # Create ZIP archive with contents directly (no nested folder)
           Write-Host "Creating ZIP archive..."
           if (Test-Path $zipName) { Remove-Item $zipName -Force }
 
           # Change to the directory and zip its contents (not the directory itself)
-          Push-Location "dist\vrc-monitor-v2"
+          Push-Location "dist\vrc-monitor"
           Compress-Archive -Path "*" -DestinationPath "..\..\$zipName" -CompressionLevel Optimal -Force
           Pop-Location
 
@@ -181,20 +187,20 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
-          name: VRChat Monitor v2 ${{ steps.get_version.outputs.version }}
+          name: VRChat Monitor ${{ steps.get_version.outputs.version }}
           body_path: RELEASE_NOTES.md
           draft: false
           prerelease: false
           make_latest: true
           generate_release_notes: false
           files: |
-            vrc-monitor-v2-windows-x64.zip
+            vrc-monitor-windows-x64.zip
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: vrc-monitor-v2-${{ steps.get_version.outputs.version }}
+          name: vrc-monitor-${{ steps.get_version.outputs.version }}
           path: |
-            vrc-monitor-v2-windows-x64.zip
+            vrc-monitor-windows-x64.zip
             RELEASE_NOTES.md
           retention-days: 30

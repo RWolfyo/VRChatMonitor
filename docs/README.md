@@ -1,6 +1,6 @@
-# VRChat Monitor v2 Documentation
+# VRChat Monitor Documentation
 
-Complete documentation index for VRChat Monitor v2.
+Complete documentation index for VRChat Monitor.
 
 ## Getting Started
 
@@ -8,9 +8,18 @@ Complete documentation index for VRChat Monitor v2.
 
 1. **[Main README](../README.md)** - Overview, quick start, features
 2. **[Setup Guide](SETUP.md)** - Installation and initial configuration
-3. **[Configuration Reference](CONFIGURATION.md)** - All config options explained
+3. **[Interactive Commands](COMMANDS.md)** - Command system reference
+4. **[Configuration Reference](CONFIGURATION.md)** - All config options explained
 
 ## User Guides
+
+### Usage
+
+- **[Interactive Commands](COMMANDS.md)** - Command system guide
+  - Available commands (help, test-alert, status, etc.)
+  - Command aliases
+  - Real-time interaction
+  - Command examples
 
 ### Setup & Configuration
 
@@ -83,6 +92,8 @@ Complete documentation index for VRChat Monitor v2.
 | Task | Documentation |
 |------|---------------|
 | Install the application | [Setup Guide](SETUP.md) |
+| View available commands | [Commands Reference](COMMANDS.md) |
+| Test notifications | Type `test-alert` in app |
 | Configure Discord webhooks | [Setup Guide](SETUP.md#discord-webhook-setup) |
 | Setup VR overlay | [Setup Guide](SETUP.md#vr-overlay-setup) |
 | Add blocked group | [Blocklist Management](BLOCKLIST.md#managing-the-database) |
@@ -158,6 +169,7 @@ Complete documentation index for VRChat Monitor v2.
 docs/
 ├── README.md              # This file (documentation index)
 ├── SETUP.md               # Installation and setup guide
+├── COMMANDS.md            # Interactive command reference
 ├── CONFIGURATION.md       # Configuration reference
 ├── BLOCKLIST.md           # Blocklist management
 ├── TROUBLESHOOTING.md     # Common issues and solutions
@@ -182,5 +194,5 @@ See [Building Guide](BUILDING.md) for development setup and contribution guideli
 
 ---
 
-**Version**: 2.0.0
-**Last Updated**: 2025-10-31
+**Version**: 2.0.1
+**Last Updated**: 2025-11-02

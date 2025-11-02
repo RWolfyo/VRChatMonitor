@@ -1,4 +1,4 @@
-# VRChat Monitor v2 - Release {VERSION}
+# VRChat Monitor - Release {VERSION}
 
 ## Changes
 
@@ -6,6 +6,7 @@
 
 ## Features
 
+- ✅ Interactive command system
 - ✅ VRChat authentication with 2FA support
 - ✅ Real-time log monitoring
 - ✅ SQLite blocklist (86+ groups pre-loaded)
@@ -23,16 +24,20 @@
 
 ## Installation
 
-1. Download `vrc-monitor-v2-windows-x64.zip`
+1. Download `vrc-monitor-windows-x64.zip`
 2. Extract to a folder of your choice
-3. Run `vrc-monitor-v2.exe`
+3. Run `vrc-monitor.exe`
 4. Enter your VRChat credentials when prompted
 
-## First Run
+## Interactive Commands
 
-Credentials are saved after first login. Subsequent runs auto-login.
+Once started, type commands at the prompt:
+- `help` - Show all available commands
+- `test-alert` - Test all notification channels
+- `status` - Show monitor status
+- `quit` - Exit application
 
-To test notifications: `vrc-monitor-v2.exe --test-alert`
+See COMMANDS.md for full reference.
 
 ## Documentation
 
