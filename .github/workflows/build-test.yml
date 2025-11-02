@@ -108,7 +108,6 @@ jobs:
           # Copy documentation for test package
           Copy-Item -Path "README.md" -Destination "dist\vrc-monitor\README.md" -Force -ErrorAction SilentlyContinue
           Copy-Item -Path "LICENSE" -Destination "dist\vrc-monitor\LICENSE" -Force -ErrorAction SilentlyContinue
-          Copy-Item -Path "docs\COMMANDS.md" -Destination "dist\vrc-monitor\COMMANDS.md" -Force -ErrorAction SilentlyContinue
 
           # Create test package info
           @"

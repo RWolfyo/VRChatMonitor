@@ -16,14 +16,18 @@ export class CommandHandler {
   private monitor: VRChatMonitor;
   private commands: Map<string, Command> = new Map();
   private isActive: boolean = false;
+  private currentInput: string = '';
+  private cursorPosition: number = 0;
 
   constructor(monitor: VRChatMonitor) {
     this.monitor = monitor;
 
+    // Use terminal: false to prevent readline from echoing
+    // We'll handle all input/output manually
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
-      prompt: chalk.cyan('vrc-monitor> '),
+      terminal: false,
     });
 
     this.registerCommands();
@@ -177,7 +181,7 @@ export class CommandHandler {
   }
 
   /**
-   * Start interactive command prompt
+   * Start interactive command prompt with manual input handling
    */
   public start(): void {
     if (this.isActive) {
@@ -191,19 +195,22 @@ export class CommandHandler {
     console.log(chalk.gray('   Type "help" for available commands'));
     console.log();
 
-    this.rl.prompt();
+    // Show initial prompt
+    this.showPrompt();
 
-    this.rl.on('line', async (line: string) => {
-      const trimmed = line.trim();
+    // Set stdin to raw mode to capture each keypress
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.setEncoding('utf8');
 
-      if (trimmed) {
-        await this.handleCommand(trimmed);
-      }
-
-      this.rl.prompt();
+    // Handle raw input
+    process.stdin.on('data', async (key: string) => {
+      await this.handleKeypress(key);
     });
 
-    this.rl.on('close', async () => {
+    // Handle process termination
+    process.on('SIGINT', async () => {
       console.log();
       console.log(chalk.yellow('👋 Shutting down...'));
       await this.monitor.stop();
@@ -211,6 +218,100 @@ export class CommandHandler {
       console.log();
       process.exit(0);
     });
+  }
+
+  /**
+   * Handle individual keypress events
+   */
+  private async handleKeypress(key: string): Promise<void> {
+    const code = key.charCodeAt(0);
+
+    // Ctrl+C
+    if (code === 3) {
+      console.log();
+      console.log(chalk.yellow('👋 Shutting down...'));
+      await this.monitor.stop();
+      console.log(chalk.gray('Goodbye!'));
+      console.log();
+      process.exit(0);
+    }
+
+    // Ctrl+D (EOF)
+    if (code === 4) {
+      console.log();
+      console.log(chalk.yellow('👋 Shutting down...'));
+      await this.monitor.stop();
+      console.log(chalk.gray('Goodbye!'));
+      console.log();
+      process.exit(0);
+    }
+
+    // Enter/Return
+    if (key === '\r' || key === '\n') {
+      process.stdout.write('\n');
+      const command = this.currentInput.trim();
+      this.currentInput = '';
+      this.cursorPosition = 0;
+
+      if (command) {
+        await this.handleCommand(command);
+      }
+
+      this.showPrompt();
+      return;
+    }
+
+    // Backspace or Delete
+    if (code === 127 || code === 8) {
+      if (this.currentInput.length > 0 && this.cursorPosition > 0) {
+        // Remove character before cursor
+        this.currentInput =
+          this.currentInput.slice(0, this.cursorPosition - 1) +
+          this.currentInput.slice(this.cursorPosition);
+        this.cursorPosition--;
+        this.redrawLine();
+      }
+      return;
+    }
+
+    // Ignore other control characters and escape sequences
+    if (code < 32 || key.startsWith('\x1b')) {
+      return;
+    }
+
+    // Regular character - insert at cursor position
+    this.currentInput =
+      this.currentInput.slice(0, this.cursorPosition) +
+      key +
+      this.currentInput.slice(this.cursorPosition);
+    this.cursorPosition += key.length;
+    this.redrawLine();
+  }
+
+  /**
+   * Show the command prompt
+   */
+  private showPrompt(): void {
+    process.stdout.write(chalk.cyan('vrc-monitor> '));
+  }
+
+  /**
+   * Redraw the current input line
+   */
+  private redrawLine(): void {
+    // Clear the current line
+    process.stdout.write('\r');
+    process.stdout.write('\x1b[K'); // Clear to end of line
+
+    // Redraw prompt and current input
+    this.showPrompt();
+    process.stdout.write(this.currentInput);
+
+    // Move cursor to correct position
+    const offset = this.currentInput.length - this.cursorPosition;
+    if (offset > 0) {
+      process.stdout.write(`\x1b[${offset}D`); // Move cursor left
+    }
   }
 
   /**
@@ -222,6 +323,12 @@ export class CommandHandler {
     }
 
     this.isActive = false;
+
+    // Restore normal terminal mode
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+
     this.rl.close();
   }
 

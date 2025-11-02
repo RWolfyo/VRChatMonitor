@@ -46,9 +46,15 @@ async function main() {
   let monitor: VRChatMonitor | null = null;
 
   try {
-    // Set console window title (Windows only)
+    // Set console window title and configure console mode (Windows only)
     if (process.platform === 'win32') {
       process.stdout.write(`\x1b]0;VRChat Monitor v${APP_VERSION}\x07`);
+
+      // Enable virtual terminal processing for better readline support
+      // This helps prevent double-echo issues in packaged executables
+      if (process.stdout.isTTY) {
+        process.stdout.write('\x1b[?25h'); // Show cursor
+      }
     }
 
     // Print banner
