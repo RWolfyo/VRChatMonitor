@@ -113,7 +113,7 @@ export class VRChatAPIService {
       // Initialize client with stored session - Keyv will restore cookies automatically
       this.client = new VRChat({
         application: {
-          name: 'VRChat Monitor v2',
+          name: 'VRChat Monitor',
           version: APP_VERSION,
           contact: 'hubert@wolfyo.eu',
         },
@@ -168,7 +168,7 @@ export class VRChatAPIService {
     // Create client with authentication credentials (recommended pattern)
     this.client = new VRChat({
       application: {
-        name: 'VRChat Monitor v2',
+        name: 'VRChat Monitor',
         version: APP_VERSION,
         contact: 'hubert@wolfyo.eu',
       },

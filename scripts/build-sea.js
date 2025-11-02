@@ -36,7 +36,7 @@ async function buildSEA() {
 
   const platform = process.platform;
   const isWindows = platform === 'win32';
-  const outputName = isWindows ? 'vrc-monitor-v2.exe' : 'vrc-monitor-v2';
+  const outputName = isWindows ? 'vrc-monitor.exe' : 'vrc-monitor';
 
   ensureDir('dist');
 
@@ -230,7 +230,7 @@ async function buildSEA() {
 
   // Copy vendor binaries alongside the executable
   console.log('📁 Setting up deployment directory...');
-  const deployDir = path.join('dist', 'vrc-monitor-v2');
+  const deployDir = path.join('dist', 'vrc-monitor');
   ensureDir(deployDir);
 
   // Copy executable
@@ -268,7 +268,7 @@ async function buildSEA() {
   console.log('🎉 Build Complete!');
   console.log('═══════════════════════════════════════════════════════════');
   console.log(`Executable: dist/${outputName}`);
-  console.log(`Deployment: dist/vrc-monitor-v2/`);
+  console.log(`Deployment: dist/vrc-monitor/`);
   console.log('═══════════════════════════════════════════════════════════\n');
 }
 

@@ -104,7 +104,7 @@ export class NotificationService {
   public async testNotification(): Promise<void> {
     await this.notify({
       title: '✅ Test Notification',
-      message: `VRChat Monitor v2 is running!\nTime: ${new Date().toLocaleTimeString()}`,
+      message: `VRChat Monitor is running!\nTime: ${new Date().toLocaleTimeString()}`,
       sound: true,
     });
   }

@@ -43,7 +43,7 @@ export class VRChatMonitor extends EventEmitter {
     Logger.initialize(this.config.logging.level, this.config.logging.file);
     this.logger = Logger.getInstance();
 
-    this.logger.info('🔍 VRChat Monitor v2 initializing...');
+    this.logger.info('🔍 VRChat Monitor initializing...');
 
     // Initialize services
     this.notificationService = new NotificationService();

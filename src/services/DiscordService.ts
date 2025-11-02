@@ -356,7 +356,7 @@ export class DiscordService {
    */
   public async testWebhook(): Promise<boolean> {
     try {
-      await this.sendMessage('✅ VRChat Monitor v2 - Discord webhook test successful!');
+      await this.sendMessage('✅ VRChat Monitor - Discord webhook test successful!');
       return true;
     } catch (error) {
       this.logger.error('Discord webhook test failed', { error });

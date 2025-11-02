@@ -1,10 +1,10 @@
 {
-  "name": "vrchat-monitor-v2",
+  "name": "vrchat-monitor",
   "version": "2.0.0",
   "description": "Advanced VRChat instance monitor with blocklist checking and real-time notifications",
   "type": "commonjs",
-  "main": "dist/vrc-monitor-v2.exe",
-  "bin": "dist/vrc-monitor-v2.exe",
+  "main": "dist/vrc-monitor.exe",
+  "bin": "dist/vrc-monitor.exe",
   "author": "Wolfyo",
   "license": "MIT",
   "scripts": {
