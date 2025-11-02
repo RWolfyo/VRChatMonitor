@@ -5,6 +5,7 @@ import { Logger } from '../utils/Logger';
 import { PathResolver } from '../utils/PathResolver';
 import { LoginPrompt } from '../utils/LoginPrompt';
 import { KeyvBetterSqliteStore } from '../utils/KeyvBetterSqliteStore';
+import { APP_VERSION } from '../version';
 
 export interface VRChatCredentials {
   username: string;
@@ -25,7 +26,6 @@ export interface StoredSession {
 
 const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 const SESSION_REFRESH_THRESHOLD = 6 * 60 * 60 * 1000; // 6 hours
-const APP_VERSION = '2.0.0';
 
 export class VRChatAPIService {
   private client: VRChat | null = null;

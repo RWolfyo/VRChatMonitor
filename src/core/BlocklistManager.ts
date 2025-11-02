@@ -11,8 +11,7 @@ import {
   Severity,
 } from '../types/blocklist';
 import { BlocklistUpdatedEvent, VersionMismatchEvent } from '../types/events';
-
-const APP_VERSION = '2.0.0';
+import { APP_VERSION } from '../version';
 
 export class BlocklistManager extends EventEmitter {
   private logger: Logger;

@@ -2,9 +2,9 @@
 
 import { VRChatMonitor } from './core/VRChatMonitor';
 import { Logger } from './utils/Logger';
+import { CommandHandler } from './utils/CommandHandler';
+import { APP_VERSION } from './version';
 import chalk from 'chalk';
-
-const APP_VERSION = '2.0.0';
 
 /**
  * Create a centered line within the box (59 chars wide)
@@ -51,21 +51,10 @@ async function main() {
       process.stdout.write(`\x1b]0;VRChat Monitor v${APP_VERSION}\x07`);
     }
 
-    // Parse command-line arguments
-    const args = process.argv.slice(2);
-    const testAlertMode = args.includes('--test-alert') || args.includes('-t');
-    const showHelp = args.includes('--help') || args.includes('-h');
-
     // Print banner
     console.log(chalk.cyan(BANNER));
     console.log(chalk.gray('═'.repeat(61)));
     console.log();
-
-    // Show help if requested
-    if (showHelp) {
-      printHelp();
-      process.exit(0);
-    }
 
     // Initialize monitor
     monitor = new VRChatMonitor();
@@ -77,28 +66,9 @@ async function main() {
       logger.info(chalk.gray('═'.repeat(61)));
       console.log();
 
-      // If test alert mode, send test alert and exit
-      if (testAlertMode) {
-        console.log(chalk.cyan.bold('🧪 TEST ALERT MODE'));
-        console.log(chalk.gray('═'.repeat(61)));
-        console.log();
-
-        await monitor!.sendTestAlert();
-
-        console.log();
-        console.log(chalk.gray('═'.repeat(61)));
-        console.log(chalk.green('Test alert sent successfully!'));
-        console.log(chalk.gray('Exiting in 3 seconds...'));
-
-        setTimeout(async () => {
-          await monitor!.stop();
-          process.exit(0);
-        }, 3000);
-      } else {
-        console.log(chalk.yellow('ℹ️  Press Ctrl+C to exit'));
-        console.log(chalk.gray('   Use --test-alert to test notifications'));
-        console.log();
-      }
+      // Start interactive command handler
+      const commandHandler = new CommandHandler(monitor!);
+      commandHandler.start();
     });
 
     monitor.on('alert', (result) => {
@@ -166,9 +136,6 @@ async function main() {
 
     // Start monitoring
     await monitor.start();
-
-    // Keep process alive
-    await new Promise(() => {}); // Intentionally never resolves
 
   } catch (error) {
     console.error();
@@ -301,26 +268,6 @@ function getLocationLabel(location: string): string {
     default:
       return location;
   }
-}
-
-/**
- * Print help information
- */
-function printHelp(): void {
-  console.log(chalk.white.bold('Usage:'));
-  console.log(chalk.gray('  vrc-monitor-v2 [options]'));
-  console.log();
-  console.log(chalk.white.bold('Options:'));
-  console.log(chalk.cyan('  -h, --help        ') + chalk.gray('Show this help message'));
-  console.log(chalk.cyan('  -t, --test-alert  ') + chalk.gray('Send test alerts on all configured channels and exit'));
-  console.log();
-  console.log(chalk.white.bold('Examples:'));
-  console.log(chalk.gray('  vrc-monitor-v2                  ') + chalk.white('# Normal operation'));
-  console.log(chalk.gray('  vrc-monitor-v2 --test-alert     ') + chalk.white('# Test all notifications'));
-  console.log();
-  console.log(chalk.white.bold('Configuration:'));
-  console.log(chalk.gray('  Edit config.json to configure notifications, blocklist, and settings'));
-  console.log();
 }
 
 /**
