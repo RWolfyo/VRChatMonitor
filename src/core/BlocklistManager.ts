@@ -286,36 +286,41 @@ export class BlocklistManager extends EventEmitter {
     this.logger.verbose('BlocklistManager: User groups retrieved', {
       userId,
       groupCount: groups.length,
-      groups: groups.map(g => ({ id: g.id, name: g.name, description: g.description }))
+      groups: groups.map(g => ({ id: g.id, groupId: g.groupId, name: g.name, description: g.description }))
     });
 
     // Check each group
     for (const group of groups) {
+      // Extract the actual group ID - VRChat API returns group.id as membership ID (gmem_xxx)
+      // and group.groupId as the actual group ID (grp_xxx)
+      const actualGroupId = group.groupId || group.id;
+
       this.logger.verbose('BlocklistManager: Checking group', {
-        groupId: group.id,
+        membershipId: group.id,
+        groupId: actualGroupId,
         groupName: group.name,
         groupDescription: group.description
       });
 
       // Skip whitelisted groups
-      const whitelistedGroup = this.db.prepare('SELECT * FROM whitelist_groups WHERE group_id = ?').get(group.id);
+      const whitelistedGroup = this.db.prepare('SELECT * FROM whitelist_groups WHERE group_id = ?').get(actualGroupId);
       if (whitelistedGroup) {
-        this.logger.debug(`Group ${group.id} is whitelisted`, { name: group.name });
-        this.logger.verbose('BlocklistManager: Group whitelisted', { groupId: group.id, data: whitelistedGroup });
+        this.logger.debug(`Group ${actualGroupId} is whitelisted`, { name: group.name });
+        this.logger.verbose('BlocklistManager: Group whitelisted', { groupId: actualGroupId, data: whitelistedGroup });
         continue;
       }
 
       // Check blocked groups
-      const blockedGroup = this.db.prepare('SELECT * FROM blocked_groups WHERE group_id = ?').get(group.id);
+      const blockedGroup = this.db.prepare('SELECT * FROM blocked_groups WHERE group_id = ?').get(actualGroupId);
       this.logger.verbose('BlocklistManager: Group block check', {
-        groupId: group.id,
+        groupId: actualGroupId,
         blocked: !!blockedGroup,
         data: blockedGroup
       });
 
       if (blockedGroup) {
         this.logger.verbose('BlocklistManager: MATCH - Blocked group found', {
-          groupId: group.id,
+          groupId: actualGroupId,
           groupName: group.name,
           blockInfo: blockedGroup
         });
@@ -324,7 +329,7 @@ export class BlocklistManager extends EventEmitter {
           type: 'blockedGroup',
           details: blockedGroup.reason || 'Member of blocked group',
           severity: (blockedGroup.severity as Severity) || 'medium',
-          groupId: group.id,
+          groupId: actualGroupId,
           groupName: group.name,
           reason: blockedGroup.reason || 'Member of blocked group',
           author: blockedGroup.author || 'Unknown',
@@ -338,7 +343,7 @@ export class BlocklistManager extends EventEmitter {
         const matchesDesc = pattern.test(group.description || '');
 
         this.logger.verbose('BlocklistManager: Keyword pattern test', {
-          groupId: group.id,
+          groupId: actualGroupId,
           pattern: pattern.source,
           matchesName,
           matchesDesc,
@@ -352,7 +357,7 @@ export class BlocklistManager extends EventEmitter {
           const matchLocation = matchesName ? 'groupName' : 'groupDescription';
 
           this.logger.verbose('BlocklistManager: MATCH - Keyword pattern matched', {
-            groupId: group.id,
+            groupId: actualGroupId,
             groupName: group.name,
             pattern: pattern.source,
             matchLocation,
@@ -364,7 +369,7 @@ export class BlocklistManager extends EventEmitter {
             type: 'keywordGroup',
             details: patternInfo?.reason || `Group matches keyword pattern`,
             severity: (patternInfo?.severity as Severity) || 'medium',
-            groupId: group.id,
+            groupId: actualGroupId,
             groupName: group.name,
             keyword: pattern.source,
             keywordMatchLocation: matchLocation,
@@ -372,6 +377,8 @@ export class BlocklistManager extends EventEmitter {
             reason: patternInfo?.reason || `Keyword pattern matched in group ${matchLocation}`,
             author: patternInfo?.author || 'Unknown',
           });
+          // Break after first match to avoid duplicate matches for the same group
+          break;
         }
       }
     }
