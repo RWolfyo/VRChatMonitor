@@ -69,6 +69,47 @@ export class ConfigManager {
   }
 
   private validateAndApplyDefaults(config: Partial<Config>): Config {
+    // Validate and clamp volume (0-1)
+    let volume = config.audio?.volume ?? 0.5;
+    if (volume < 0 || volume > 1 || isNaN(volume)) {
+      this.logger.warn(`Invalid audio volume ${volume}, clamping to 0-1 range`);
+      volume = Math.max(0, Math.min(1, volume));
+    }
+
+    // Validate update interval (must be positive)
+    let updateInterval = config.blocklist?.updateInterval ?? 60;
+    if (updateInterval <= 0 || isNaN(updateInterval)) {
+      this.logger.warn(`Invalid update interval ${updateInterval}, using default 60 minutes`);
+      updateInterval = 60;
+    }
+
+    // Validate deduplicate window (must be positive)
+    let deduplicateWindow = config.advanced?.deduplicateWindow ?? 30;
+    if (deduplicateWindow < 0 || isNaN(deduplicateWindow)) {
+      this.logger.warn(`Invalid deduplicate window ${deduplicateWindow}, using default 30 seconds`);
+      deduplicateWindow = 30;
+    }
+
+    // Validate log level
+    const validLogLevels = ['error', 'warn', 'info', 'debug', 'verbose'];
+    const logLevel = config.logging?.level || 'info';
+    if (!validLogLevels.includes(logLevel)) {
+      this.logger.warn(`Invalid log level ${logLevel}, using default 'info'`);
+    }
+
+    // Validate webhook URL format if Discord is enabled
+    const webhookUrl = config.notifications?.discord?.webhookUrl || '';
+    if (config.notifications?.discord?.enabled && webhookUrl) {
+      try {
+        const url = new URL(webhookUrl);
+        if (!url.hostname.includes('discord.com')) {
+          this.logger.warn('Discord webhook URL does not appear to be a Discord domain');
+        }
+      } catch (error) {
+        this.logger.warn(`Invalid Discord webhook URL format: ${webhookUrl}`);
+      }
+    }
+
     return {
       vrchat: {
         username: config.vrchat?.username || '',
@@ -81,7 +122,7 @@ export class ConfigManager {
         },
         discord: {
           enabled: config.notifications?.discord?.enabled ?? false,
-          webhookUrl: config.notifications?.discord?.webhookUrl || '',
+          webhookUrl: webhookUrl,
           mentionRoles: config.notifications?.discord?.mentionRoles || [],
         },
         vrcx: {
@@ -91,21 +132,21 @@ export class ConfigManager {
       },
       audio: {
         enabled: config.audio?.enabled ?? true,
-        volume: config.audio?.volume ?? 0.5,
+        volume: volume,
         filePath: config.audio?.filePath || '',
       },
       blocklist: {
         autoUpdate: config.blocklist?.autoUpdate ?? true,
         remoteUrl: config.blocklist?.remoteUrl || 'https://raw.githubusercontent.com/RWolfyo/VRChatMonitor/refs/heads/master/blockedGroups.jsonc',
-        updateInterval: config.blocklist?.updateInterval ?? 60,
+        updateInterval: updateInterval,
       },
       logging: {
-        level: config.logging?.level || 'info',
+        level: validLogLevels.includes(logLevel) ? logLevel as Config['logging']['level'] : 'info',
         file: config.logging?.file ?? false,
       },
       advanced: {
         cacheDir: config.advanced?.cacheDir || '',
-        deduplicateWindow: config.advanced?.deduplicateWindow ?? 30,
+        deduplicateWindow: deduplicateWindow,
       },
     };
   }

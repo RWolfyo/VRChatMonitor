@@ -36,6 +36,14 @@ export class VRChatAPIService {
   private loginPrompt: LoginPrompt;
   private sessionTimestamp: number = 0;
   private onCredentialsSaved?: (username: string, password: string) => void;
+  private pruneTimer: NodeJS.Timeout | null = null;
+
+  // Rate limiting: 10 calls per 30 seconds
+  private apiCallQueue: Array<{ fn: () => Promise<any>; resolve: (value: any) => void; reject: (error: any) => void }> = [];
+  private isProcessingQueue: boolean = false;
+  private callTimestamps: number[] = [];
+  private readonly RATE_LIMIT_CALLS = 10;
+  private readonly RATE_LIMIT_WINDOW_MS = 30000; // 30 seconds
 
   constructor(
     private credentials: VRChatCredentials | null = null,
@@ -65,6 +73,85 @@ export class VRChatAPIService {
     this.keyv.on('error', (err) => {
       this.logger.error('Keyv connection error', { error: err });
     });
+
+    // Start automatic cache pruning every 5 minutes
+    this.startCachePruning();
+  }
+
+  /**
+   * Start automatic cache pruning to prevent memory leaks
+   */
+  private startCachePruning(): void {
+    this.pruneTimer = setInterval(() => {
+      this.pruneCache();
+    }, 5 * 60 * 1000); // 5 minutes
+  }
+
+  /**
+   * Queue an API call with rate limiting (10 calls per 30 seconds)
+   */
+  private async queueApiCall<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.apiCallQueue.push({ fn: fn as () => Promise<any>, resolve, reject });
+
+      if (!this.isProcessingQueue) {
+        this.processApiQueue();
+      }
+    });
+  }
+
+  /**
+   * Process the API call queue with rate limiting
+   */
+  private async processApiQueue(): Promise<void> {
+    if (this.isProcessingQueue) {
+      return;
+    }
+
+    this.isProcessingQueue = true;
+
+    while (this.apiCallQueue.length > 0) {
+      // Clean up old timestamps outside the rate limit window
+      const now = Date.now();
+      this.callTimestamps = this.callTimestamps.filter(
+        timestamp => now - timestamp < this.RATE_LIMIT_WINDOW_MS
+      );
+
+      // Check if we've hit the rate limit
+      if (this.callTimestamps.length >= this.RATE_LIMIT_CALLS) {
+        // Calculate how long to wait
+        const oldestCall = this.callTimestamps[0];
+        const waitTime = this.RATE_LIMIT_WINDOW_MS - (now - oldestCall);
+
+        this.logger.debug(`Rate limit reached (${this.callTimestamps.length}/${this.RATE_LIMIT_CALLS}), waiting ${waitTime}ms`);
+
+        // Wait before processing next call
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+
+      // Get next call from queue
+      const call = this.apiCallQueue.shift();
+      if (!call) break;
+
+      // Record this API call timestamp
+      this.callTimestamps.push(Date.now());
+
+      // Execute the API call
+      try {
+        const result = await call.fn();
+        call.resolve(result);
+      } catch (error) {
+        call.reject(error);
+      }
+
+      // Small delay between calls to spread them out
+      if (this.apiCallQueue.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    this.isProcessingQueue = false;
   }
 
   /**
@@ -291,33 +378,36 @@ export class VRChatAPIService {
       return cached;
     }
 
-    try {
-      this.logger.debug(`Fetching groups for user: ${userId}`);
-      this.logger.verbose('API Request: getUserGroups', { userId });
+    // Queue the API call with rate limiting
+    return this.queueApiCall(async () => {
+      try {
+        this.logger.debug(`Fetching groups for user: ${userId}`);
+        this.logger.verbose('API Request: getUserGroups', { userId });
 
-      const response = await (this.client as any).getUserGroups({ path: { userId } });
+        const response = await (this.client as any).getUserGroups({ path: { userId } });
 
-      this.logger.verbose('API Response: getUserGroups', {
-        userId,
-        success: !response.error,
-        groupCount: response.data?.length || 0,
-        groups: response.data,
-        error: response.error
-      });
+        this.logger.verbose('API Response: getUserGroups', {
+          userId,
+          success: !response.error,
+          groupCount: response.data?.length || 0,
+          groups: response.data,
+          error: response.error
+        });
 
-      if (response.error) {
-        throw new Error(response.error.message);
+        if (response.error) {
+          throw new Error(response.error.message);
+        }
+
+        const groups = response.data || [];
+        this.setCache(cacheKey, groups);
+
+        return groups;
+      } catch (error) {
+        this.logger.error(`Failed to fetch groups for user: ${userId}`, { error });
+        // Throw error instead of returning empty array - caller must handle
+        throw error;
       }
-
-      const groups = response.data || [];
-      this.setCache(cacheKey, groups);
-
-      return groups;
-    } catch (error) {
-      this.logger.error(`Failed to fetch groups for user: ${userId}`, { error });
-      // Return empty array on error to allow monitoring to continue
-      return [];
-    }
+    });
   }
 
   /**
@@ -336,32 +426,35 @@ export class VRChatAPIService {
       return cached;
     }
 
-    try {
-      this.logger.debug(`Fetching profile for user: ${userId}`);
-      this.logger.verbose('API Request: getUser', { userId });
+    // Queue the API call with rate limiting
+    return this.queueApiCall(async () => {
+      try {
+        this.logger.debug(`Fetching profile for user: ${userId}`);
+        this.logger.verbose('API Request: getUser', { userId });
 
-      const response = await (this.client as any).getUser({ path: { userId } });
+        const response = await (this.client as any).getUser({ path: { userId } });
 
-      this.logger.verbose('API Response: getUser', {
-        userId,
-        success: !response.error,
-        profile: response.data,
-        error: response.error
-      });
+        this.logger.verbose('API Response: getUser', {
+          userId,
+          success: !response.error,
+          profile: response.data,
+          error: response.error
+        });
 
-      if (response.error) {
-        throw new Error(response.error.message);
+        if (response.error) {
+          throw new Error(response.error.message);
+        }
+
+        const profile = response.data;
+        this.setCache(cacheKey, profile);
+
+        return profile;
+      } catch (error) {
+        this.logger.error(`Failed to fetch profile for user: ${userId}`, { error });
+        // Throw error instead of returning null - caller must handle
+        throw error;
       }
-
-      const profile = response.data;
-      this.setCache(cacheKey, profile);
-
-      return profile;
-    } catch (error) {
-      this.logger.error(`Failed to fetch profile for user: ${userId}`, { error });
-      // Return null on error to allow monitoring to continue
-      return null;
-    }
+    });
   }
 
   /**
@@ -428,6 +521,12 @@ export class VRChatAPIService {
    * Disconnect and cleanup
    */
   public async disconnect(): Promise<void> {
+    // Stop cache pruning timer
+    if (this.pruneTimer) {
+      clearInterval(this.pruneTimer);
+      this.pruneTimer = null;
+    }
+
     this.clearCache();
     await this.keyv.disconnect();
     this.client = null;

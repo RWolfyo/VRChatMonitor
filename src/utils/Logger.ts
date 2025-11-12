@@ -10,28 +10,28 @@ export class Logger {
     // Map our custom 'verbose' level to Winston's 'silly' level
     const winstonLevel = level === 'verbose' ? 'silly' : level;
 
-    const transports: winston.transport[] = [
-      new winston.transports.Console({
-        format: winston.format.combine(
-          winston.format.colorize(),
-          winston.format.timestamp({ format: 'HH:mm:ss' }),
-          winston.format.printf(({ timestamp, level: logLevel, message, ...meta }) => {
-            // Pretty print large objects for verbose logging
-            let metaStr = '';
-            if (Object.keys(meta).length) {
-              if (winstonLevel === 'silly') {
-                // Verbose mode: pretty print with indentation
-                metaStr = `\n${JSON.stringify(meta, null, 2)}`;
-              } else {
-                // Normal mode: compact JSON
-                metaStr = ` ${JSON.stringify(meta)}`;
-              }
+    const consoleTransport = new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.timestamp({ format: 'HH:mm:ss' }),
+        winston.format.printf(({ timestamp, level: logLevel, message, ...meta }) => {
+          // Pretty print large objects for verbose logging
+          let metaStr = '';
+          if (Object.keys(meta).length) {
+            if (winstonLevel === 'silly') {
+              // Verbose mode: pretty print with indentation
+              metaStr = `\n${JSON.stringify(meta, null, 2)}`;
+            } else {
+              // Normal mode: compact JSON
+              metaStr = ` ${JSON.stringify(meta)}`;
             }
-            return `[${timestamp}] ${logLevel}: ${message}${metaStr}`;
-          })
-        ),
-      }),
-    ];
+          }
+          return `[${timestamp}] ${logLevel}: ${message}${metaStr}`;
+        })
+      ),
+    });
+
+    const transports: winston.transport[] = [consoleTransport];
 
     if (enableFile) {
       transports.push(
@@ -49,6 +49,16 @@ export class Logger {
       level: winstonLevel,
       transports,
     });
+
+    // Listen to console transport's 'logged' event for accurate timing
+    consoleTransport.on('logged', () => {
+      if (Logger.onLogCallback) {
+        // Use setImmediate to ensure output is flushed
+        setImmediate(() => {
+          Logger.onLogCallback?.();
+        });
+      }
+    });
   }
 
   public static getInstance(level?: LogLevel, enableFile?: boolean): Logger {
@@ -59,41 +69,28 @@ export class Logger {
   }
 
   public static initialize(level: LogLevel, enableFile: boolean): void {
+    Logger.onLogCallback = undefined; // Clear callback on re-initialization
     Logger.instance = new Logger(level, enableFile);
   }
 
   public error(message: string, meta?: Record<string, unknown>): void {
     this.logger.error(message, meta);
-    this.notifyLogOutput();
   }
 
   public warn(message: string, meta?: Record<string, unknown>): void {
     this.logger.warn(message, meta);
-    this.notifyLogOutput();
   }
 
   public info(message: string, meta?: Record<string, unknown>): void {
     this.logger.info(message, meta);
-    this.notifyLogOutput();
   }
 
   public debug(message: string, meta?: Record<string, unknown>): void {
     this.logger.debug(message, meta);
-    this.notifyLogOutput();
   }
 
   public verbose(message: string, meta?: Record<string, unknown>): void {
     this.logger.silly(message, meta);
-    this.notifyLogOutput();
-  }
-
-  private notifyLogOutput(): void {
-    if (Logger.onLogCallback) {
-      // Use setImmediate to ensure the log is written before the prompt is redrawn
-      setImmediate(() => {
-        Logger.onLogCallback?.();
-      });
-    }
   }
 
   public static setLogOutputCallback(callback: () => void): void {

@@ -25,6 +25,8 @@ export class BlocklistManager extends EventEmitter {
   private updateInterval: number;
   private updateTimer: NodeJS.Timeout | null = null;
   private compiledKeywordPatterns: RegExp[] = [];
+  private updateInProgress: boolean = false;
+  private updateQueue: Array<() => void> = [];
 
   constructor(
     vrchatAPI: VRChatAPIService,
@@ -103,7 +105,28 @@ export class BlocklistManager extends EventEmitter {
 
     for (const row of patterns) {
       try {
-        this.compiledKeywordPatterns.push(new RegExp(row.pattern, 'i'));
+        const regex = new RegExp(row.pattern, 'i');
+
+        // Test regex for ReDoS vulnerability by timing execution
+        // Test against a long string to detect catastrophic backtracking
+        const testString = 'x'.repeat(100);
+        const start = Date.now();
+
+        try {
+          regex.test(testString);
+        } catch (testError) {
+          this.logger.warn(`Regex pattern execution error: ${row.pattern}`, { error: testError });
+          continue;
+        }
+
+        const duration = Date.now() - start;
+
+        if (duration > 100) {
+          this.logger.warn(`Regex pattern too slow (${duration}ms), potential ReDoS - skipping: ${row.pattern}`);
+          continue;
+        }
+
+        this.compiledKeywordPatterns.push(regex);
       } catch (error) {
         this.logger.warn(`Invalid regex pattern: ${row.pattern}`, { error });
       }
@@ -114,6 +137,15 @@ export class BlocklistManager extends EventEmitter {
    * Update blocklist from remote URL
    */
   private async updateFromRemote(): Promise<void> {
+    // Queue updates if one is already in progress to prevent race conditions
+    if (this.updateInProgress) {
+      this.logger.debug('Update already in progress, queueing request');
+      return new Promise((resolve) => {
+        this.updateQueue.push(resolve);
+      });
+    }
+
+    this.updateInProgress = true;
     this.logger.debug('Checking for blocklist updates from remote...');
 
     try {
@@ -130,7 +162,9 @@ export class BlocklistManager extends EventEmitter {
         tempDb.prepare('SELECT value FROM metadata WHERE key = ?').get('lastUpdated');
         tempDb.close();
       } catch (error) {
-        fs.unlinkSync(tempPath);
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
         throw new Error('Downloaded file is not a valid SQLite database');
       }
 
@@ -184,26 +218,75 @@ export class BlocklistManager extends EventEmitter {
         error: error instanceof Error ? error.message : String(error),
         url: this.remoteUrl,
       });
+    } finally {
+      this.updateInProgress = false;
+
+      // Notify all queued update requests
+      const callbacks = this.updateQueue.splice(0);
+      callbacks.forEach(cb => cb());
     }
   }
 
   /**
-   * Download file from URL
+   * Download file from URL with SSRF protection and timeout
    */
-  private async downloadFile(url: string, dest: string): Promise<void> {
+  private async downloadFile(url: string, dest: string, redirectCount: number = 0): Promise<void> {
+    const MAX_REDIRECTS = 5;
+    const DOWNLOAD_TIMEOUT_MS = 30000; // 30 seconds
+
+    if (redirectCount > MAX_REDIRECTS) {
+      throw new Error(`Too many redirects (${redirectCount})`);
+    }
+
+    // Validate URL to prevent SSRF
+    let urlObj: URL;
+    try {
+      urlObj = new URL(url);
+    } catch (error) {
+      throw new Error(`Invalid URL: ${url}`);
+    }
+
+    // Only allow HTTPS and HTTP protocols
+    if (urlObj.protocol !== 'https:' && urlObj.protocol !== 'http:') {
+      throw new Error(`Invalid URL protocol: ${urlObj.protocol}. Only HTTP(S) allowed.`);
+    }
+
+    // Prevent access to private IP ranges and localhost
+    const hostname = urlObj.hostname.toLowerCase();
+    if (this.isPrivateHost(hostname)) {
+      throw new Error(`Access to private IP/hostname not allowed: ${hostname}`);
+    }
+
     return new Promise((resolve, reject) => {
       const file = fs.createWriteStream(dest);
+      let timeoutHandle: NodeJS.Timeout | null = null;
 
-      https.get(url, (response) => {
+      const request = https.get(url, { timeout: DOWNLOAD_TIMEOUT_MS }, (response) => {
+        // Handle redirects
         if (response.statusCode === 302 || response.statusCode === 301) {
           file.close();
-          fs.unlinkSync(dest);
-          return this.downloadFile(response.headers.location!, dest).then(resolve).catch(reject);
+          if (fs.existsSync(dest)) {
+            fs.unlinkSync(dest);
+          }
+
+          const location = response.headers.location;
+          if (!location) {
+            return reject(new Error('Redirect without location header'));
+          }
+
+          // Clear timeout for redirect
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
+
+          return this.downloadFile(location, dest, redirectCount + 1).then(resolve).catch(reject);
         }
 
         if (response.statusCode !== 200) {
           file.close();
-          fs.unlinkSync(dest);
+          if (fs.existsSync(dest)) {
+            fs.unlinkSync(dest);
+          }
           return reject(new Error(`Failed to download: ${response.statusCode}`));
         }
 
@@ -211,26 +294,79 @@ export class BlocklistManager extends EventEmitter {
 
         file.on('finish', () => {
           file.close();
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
           resolve();
         });
-      }).on('error', (error) => {
-        fs.unlinkSync(dest);
+      });
+
+      request.on('timeout', () => {
+        request.destroy();
+        file.close();
+        if (fs.existsSync(dest)) {
+          fs.unlinkSync(dest);
+        }
+        reject(new Error('Download timeout'));
+      });
+
+      request.on('error', (error) => {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+        }
+        file.close();
+        if (fs.existsSync(dest)) {
+          fs.unlinkSync(dest);
+        }
         reject(error);
       });
     });
   }
 
   /**
-   * Get simple file hash for comparison
+   * Check if hostname is a private IP or localhost
+   */
+  private isPrivateHost(hostname: string): boolean {
+    // Check for localhost variations
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+      return true;
+    }
+
+    // Check for private IPv4 ranges
+    const ipv4Pattern = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/;
+    const match = hostname.match(ipv4Pattern);
+    if (match) {
+      const octets = match.slice(1).map(Number);
+      const [a, b] = octets;
+
+      // 10.0.0.0/8
+      if (a === 10) return true;
+      // 172.16.0.0/12
+      if (a === 172 && b >= 16 && b <= 31) return true;
+      // 192.168.0.0/16
+      if (a === 192 && b === 168) return true;
+      // 169.254.0.0/16 (link-local)
+      if (a === 169 && b === 254) return true;
+    }
+
+    // Check for private IPv6 ranges
+    if (hostname.includes(':')) {
+      // fc00::/7 (unique local address)
+      if (hostname.startsWith('fc') || hostname.startsWith('fd')) return true;
+      // fe80::/10 (link-local)
+      if (hostname.startsWith('fe80')) return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Get cryptographic file hash for comparison
    */
   private getFileHash(filePath: string): string {
+    const crypto = require('crypto');
     const content = fs.readFileSync(filePath);
-    let hash = 0;
-    for (let i = 0; i < content.length; i++) {
-      hash = ((hash << 5) - hash) + content[i];
-      hash |= 0; // Convert to 32bit integer
-    }
-    return hash.toString();
+    return crypto.createHash('sha256').update(content).digest('hex');
   }
 
   /**
@@ -282,12 +418,29 @@ export class BlocklistManager extends EventEmitter {
     }
 
     // Get user groups
-    const groups = await this.vrchatAPI.getUserGroups(userId);
-    this.logger.verbose('BlocklistManager: User groups retrieved', {
-      userId,
-      groupCount: groups.length,
-      groups: groups.map(g => ({ id: g.id, groupId: g.groupId, name: g.name, description: g.description }))
-    });
+    let groups: any[] = [];
+    try {
+      groups = await this.vrchatAPI.getUserGroups(userId);
+      this.logger.verbose('BlocklistManager: User groups retrieved', {
+        userId,
+        groupCount: groups.length,
+        groups: groups.map(g => ({ id: g.id, groupId: g.groupId, name: g.name, description: g.description }))
+      });
+    } catch (error) {
+      this.logger.error('Failed to fetch user groups - cannot verify group membership', {
+        userId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't return - we can still check keywords in profile
+      // But add a warning match to alert about the API failure
+      matches.push({
+        type: 'keywordUser',
+        details: 'API Error: Could not verify group membership',
+        severity: 'medium',
+        reason: 'VRChat API failed to return user groups - security check incomplete',
+        author: 'System',
+      });
+    }
 
     // Check each group
     for (const group of groups) {
@@ -386,6 +539,11 @@ export class BlocklistManager extends EventEmitter {
     // Check user profile for keyword patterns
     try {
       const profile = await this.vrchatAPI.getUserProfile(userId);
+
+      if (!profile) {
+        throw new Error('Profile data is null');
+      }
+
       this.logger.verbose('BlocklistManager: User profile retrieved', {
         userId,
         profile: {
@@ -435,10 +593,12 @@ export class BlocklistManager extends EventEmitter {
         }
       }
     } catch (error) {
-      this.logger.debug('Could not fetch user profile for keyword check', {
+      this.logger.warn('Failed to fetch user profile for keyword check - profile patterns not verified', {
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
+      // Profile keyword check failed - this is less critical than group check
+      // Only log the warning, don't add a match
     }
 
     const result = {

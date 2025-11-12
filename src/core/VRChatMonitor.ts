@@ -221,6 +221,13 @@ export class VRChatMonitor extends EventEmitter {
   private async initializeLogWatcher(): Promise<void> {
     this.logger.info('Initializing log watcher...');
 
+    // Clean up old watcher if exists to prevent listener accumulation
+    if (this.logWatcher) {
+      this.logWatcher.removeAllListeners('playerJoin');
+      this.logWatcher.removeAllListeners('error');
+      await this.logWatcher.stop();
+    }
+
     this.logWatcher = new LogWatcher();
 
     // Listen for player join events
@@ -429,6 +436,12 @@ export class VRChatMonitor extends EventEmitter {
     try {
       // First, get the user profile to get their display name
       const profile = await this.vrchatAPI.getUserProfile(userId);
+
+      if (!profile) {
+        this.logger.error(`Failed to fetch profile for user ${userId}`);
+        return null;
+      }
+
       const displayName = profile.displayName || 'Unknown User';
 
       this.logger.info(`Manually checking user: ${displayName} (${userId})`);
@@ -449,7 +462,7 @@ export class VRChatMonitor extends EventEmitter {
       return result;
     } catch (error) {
       this.logger.error(`Error manually checking user ${userId}`, { error });
-      throw error;
+      return null;
     }
   }
 

@@ -17,8 +17,10 @@ export class CommandHandler {
   private monitor: VRChatMonitor;
   private commands: Map<string, Command> = new Map();
   private isActive: boolean = false;
+  private isExecutingCommand: boolean = false;
   private currentInput: string = '';
   private cursorPosition: number = 0;
+  private dataHandler?: (key: string) => Promise<void>;
 
   constructor(monitor: VRChatMonitor) {
     this.monitor = monitor;
@@ -298,6 +300,11 @@ export class CommandHandler {
     // Show initial prompt
     this.showPrompt();
 
+    // Remove any existing listeners to prevent duplicates
+    if (this.dataHandler) {
+      process.stdin.removeListener('data', this.dataHandler);
+    }
+
     // Register callback to redraw prompt after log output
     Logger.setLogOutputCallback(() => {
       if (this.isActive && process.stdin.isTTY) {
@@ -311,20 +318,11 @@ export class CommandHandler {
     }
     process.stdin.setEncoding('utf8');
 
-    // Handle raw input
-    process.stdin.on('data', async (key: string) => {
+    // Handle raw input - store reference to remove later
+    this.dataHandler = async (key: string) => {
       await this.handleKeypress(key);
-    });
-
-    // Handle process termination
-    process.on('SIGINT', async () => {
-      console.log();
-      console.log(chalk.yellow('👋 Shutting down...'));
-      await this.monitor.stop();
-      console.log(chalk.gray('Goodbye!'));
-      console.log();
-      process.exit(0);
-    });
+    };
+    process.stdin.on('data', this.dataHandler);
   }
 
   /**
@@ -333,18 +331,8 @@ export class CommandHandler {
   private async handleKeypress(key: string): Promise<void> {
     const code = key.charCodeAt(0);
 
-    // Ctrl+C
-    if (code === 3) {
-      console.log();
-      console.log(chalk.yellow('👋 Shutting down...'));
-      await this.monitor.stop();
-      console.log(chalk.gray('Goodbye!'));
-      console.log();
-      process.exit(0);
-    }
-
-    // Ctrl+D (EOF)
-    if (code === 4) {
+    // Ctrl+C or Ctrl+D (EOF) - graceful shutdown
+    if (code === 3 || code === 4) {
       console.log();
       console.log(chalk.yellow('👋 Shutting down...'));
       await this.monitor.stop();
@@ -355,13 +343,23 @@ export class CommandHandler {
 
     // Enter/Return
     if (key === '\r' || key === '\n') {
+      // Prevent concurrent command execution
+      if (this.isExecutingCommand) {
+        return;
+      }
+
       process.stdout.write('\n');
       const command = this.currentInput.trim();
       this.currentInput = '';
       this.cursorPosition = 0;
 
       if (command) {
-        await this.handleCommand(command);
+        this.isExecutingCommand = true;
+        try {
+          await this.handleCommand(command);
+        } finally {
+          this.isExecutingCommand = false;
+        }
       }
 
       this.showPrompt();
@@ -453,6 +451,12 @@ export class CommandHandler {
 
     // Clear the log output callback
     Logger.clearLogOutputCallback();
+
+    // Remove data handler to prevent memory leak
+    if (this.dataHandler) {
+      process.stdin.removeListener('data', this.dataHandler);
+      this.dataHandler = undefined;
+    }
 
     // Restore normal terminal mode
     if (process.stdin.isTTY) {

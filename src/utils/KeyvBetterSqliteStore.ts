@@ -10,6 +10,7 @@ export class KeyvBetterSqliteStore extends EventEmitter {
   private namespace: string;
   private tableName: string;
   private Database: any;
+  private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(options: { uri?: string; namespace?: string } = {}) {
     super();
@@ -34,9 +35,38 @@ export class KeyvBetterSqliteStore extends EventEmitter {
           expires INTEGER
         )
       `);
+
+      // Start automatic cleanup of expired entries every hour
+      this.startAutoCleanup();
     } catch (error) {
       this.emit('error', error);
       throw error;
+    }
+  }
+
+  /**
+   * Start automatic cleanup of expired entries
+   */
+  private startAutoCleanup(): void {
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupExpired();
+    }, 60 * 60 * 1000); // 1 hour
+  }
+
+  /**
+   * Cleanup expired entries from the database
+   */
+  private cleanupExpired(): void {
+    try {
+      const result = this.db
+        .prepare(`DELETE FROM "${this.tableName}" WHERE expires IS NOT NULL AND expires < ?`)
+        .run(Date.now());
+
+      if (result.changes > 0) {
+        // Silently clean up - don't spam logs
+      }
+    } catch (error) {
+      this.emit('error', error);
     }
   }
 
@@ -115,6 +145,12 @@ export class KeyvBetterSqliteStore extends EventEmitter {
    * Close the database connection
    */
   close(): void {
+    // Stop cleanup timer
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
+
     if (this.db) {
       this.db.close();
     }
