@@ -697,11 +697,11 @@ export class CommandHandler {
     }
 
     console.log(chalk.white.bold('  Blocklist Statistics:'));
-    console.log(chalk.gray(`    Blocked Groups: ${stats.blockedGroupCount || 0}`));
-    console.log(chalk.gray(`    Blocked Users: ${stats.blockedUserCount || 0}`));
-    console.log(chalk.gray(`    Whitelisted Groups: ${stats.whitelistedGroupCount || 0}`));
-    console.log(chalk.gray(`    Whitelisted Users: ${stats.whitelistedUserCount || 0}`));
-    console.log(chalk.gray(`    Keyword Patterns: ${stats.keywordCount || 0}`));
+    console.log(chalk.gray(`    Blocked Groups: ${stats.blockedGroups || 0}`));
+    console.log(chalk.gray(`    Blocked Users: ${stats.blockedUsers || 0}`));
+    console.log(chalk.gray(`    Whitelisted Groups: ${stats.whitelistedGroups || 0}`));
+    console.log(chalk.gray(`    Whitelisted Users: ${stats.whitelistedUsers || 0}`));
+    console.log(chalk.gray(`    Keyword Patterns: ${stats.keywords || 0}`));
 
     if (stats.version) {
       console.log(chalk.gray(`    Version: ${stats.version}`));
