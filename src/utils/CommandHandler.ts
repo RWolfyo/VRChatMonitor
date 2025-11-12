@@ -21,6 +21,9 @@ export class CommandHandler {
   private currentInput: string = '';
   private cursorPosition: number = 0;
   private dataHandler?: (key: string) => Promise<void>;
+  private commandHistory: string[] = [];
+  private historyIndex: number = -1;
+  private promptRedrawTimer: NodeJS.Timeout | null = null;
 
   constructor(monitor: VRChatMonitor) {
     this.monitor = monitor;
@@ -341,6 +344,50 @@ export class CommandHandler {
       process.exit(0);
     }
 
+    // Handle escape sequences (arrow keys, etc.)
+    if (key.startsWith('\x1b')) {
+      // Arrow Up: \x1b[A
+      if (key === '\x1b[A') {
+        this.navigateHistory('up');
+        return;
+      }
+      // Arrow Down: \x1b[B
+      if (key === '\x1b[B') {
+        this.navigateHistory('down');
+        return;
+      }
+      // Arrow Right: \x1b[C
+      if (key === '\x1b[C') {
+        if (this.cursorPosition < this.currentInput.length) {
+          this.cursorPosition++;
+          this.redrawLine();
+        }
+        return;
+      }
+      // Arrow Left: \x1b[D
+      if (key === '\x1b[D') {
+        if (this.cursorPosition > 0) {
+          this.cursorPosition--;
+          this.redrawLine();
+        }
+        return;
+      }
+      // Home: \x1b[H or \x1b[1~
+      if (key === '\x1b[H' || key === '\x1b[1~') {
+        this.cursorPosition = 0;
+        this.redrawLine();
+        return;
+      }
+      // End: \x1b[F or \x1b[4~
+      if (key === '\x1b[F' || key === '\x1b[4~') {
+        this.cursorPosition = this.currentInput.length;
+        this.redrawLine();
+        return;
+      }
+      // Ignore other escape sequences
+      return;
+    }
+
     // Enter/Return
     if (key === '\r' || key === '\n') {
       // Prevent concurrent command execution
@@ -350,8 +397,15 @@ export class CommandHandler {
 
       process.stdout.write('\n');
       const command = this.currentInput.trim();
+
+      // Add to history if not empty and not duplicate of last command
+      if (command && (this.commandHistory.length === 0 || this.commandHistory[this.commandHistory.length - 1] !== command)) {
+        this.commandHistory.push(command);
+      }
+
       this.currentInput = '';
       this.cursorPosition = 0;
+      this.historyIndex = -1; // Reset history navigation
 
       if (command) {
         this.isExecutingCommand = true;
@@ -379,8 +433,8 @@ export class CommandHandler {
       return;
     }
 
-    // Ignore other control characters and escape sequences
-    if (code < 32 || key.startsWith('\x1b')) {
+    // Ignore other control characters
+    if (code < 32) {
       return;
     }
 
@@ -390,6 +444,50 @@ export class CommandHandler {
       key +
       this.currentInput.slice(this.cursorPosition);
     this.cursorPosition += key.length;
+    this.redrawLine();
+  }
+
+  /**
+   * Navigate command history
+   */
+  private navigateHistory(direction: 'up' | 'down'): void {
+    if (this.commandHistory.length === 0) {
+      return;
+    }
+
+    if (direction === 'up') {
+      // Going back in history
+      if (this.historyIndex === -1) {
+        // First time pressing up - go to most recent command
+        this.historyIndex = this.commandHistory.length - 1;
+      } else if (this.historyIndex > 0) {
+        // Go to older command
+        this.historyIndex--;
+      } else {
+        // Already at oldest command
+        return;
+      }
+    } else {
+      // Going forward in history
+      if (this.historyIndex === -1) {
+        // Not in history navigation
+        return;
+      } else if (this.historyIndex < this.commandHistory.length - 1) {
+        // Go to newer command
+        this.historyIndex++;
+      } else {
+        // Back to current input (empty)
+        this.historyIndex = -1;
+        this.currentInput = '';
+        this.cursorPosition = 0;
+        this.redrawLine();
+        return;
+      }
+    }
+
+    // Set input to history command
+    this.currentInput = this.commandHistory[this.historyIndex];
+    this.cursorPosition = this.currentInput.length;
     this.redrawLine();
   }
 
@@ -420,23 +518,35 @@ export class CommandHandler {
   }
 
   /**
-   * Redraw prompt after log output (doesn't clear line first)
+   * Redraw prompt after log output (debounced to prevent spam)
    */
   private redrawPromptAfterLog(): void {
     if (!this.isActive) {
       return;
     }
 
-    // Move to beginning of line and redraw prompt with current input
-    process.stdout.write('\n');
-    this.showPrompt();
-    process.stdout.write(this.currentInput);
-
-    // Move cursor to correct position
-    const offset = this.currentInput.length - this.cursorPosition;
-    if (offset > 0) {
-      process.stdout.write(`\x1b[${offset}D`); // Move cursor left
+    // Clear any existing timer
+    if (this.promptRedrawTimer) {
+      clearTimeout(this.promptRedrawTimer);
     }
+
+    // Debounce: only redraw after logs have stopped for 50ms
+    this.promptRedrawTimer = setTimeout(() => {
+      // Only redraw if we're not currently executing a command
+      if (!this.isExecutingCommand) {
+        // Move to beginning of line and redraw prompt with current input
+        process.stdout.write('\n');
+        this.showPrompt();
+        process.stdout.write(this.currentInput);
+
+        // Move cursor to correct position
+        const offset = this.currentInput.length - this.cursorPosition;
+        if (offset > 0) {
+          process.stdout.write(`\x1b[${offset}D`); // Move cursor left
+        }
+      }
+      this.promptRedrawTimer = null;
+    }, 50);
   }
 
   /**
@@ -451,6 +561,12 @@ export class CommandHandler {
 
     // Clear the log output callback
     Logger.clearLogOutputCallback();
+
+    // Clear prompt redraw timer
+    if (this.promptRedrawTimer) {
+      clearTimeout(this.promptRedrawTimer);
+      this.promptRedrawTimer = null;
+    }
 
     // Remove data handler to prevent memory leak
     if (this.dataHandler) {
