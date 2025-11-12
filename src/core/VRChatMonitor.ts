@@ -413,6 +413,47 @@ export class VRChatMonitor extends EventEmitter {
   }
 
   /**
+   * Manually check a user ID against the blocklist
+   */
+  public async checkUserById(userId: string): Promise<MatchResult | null> {
+    if (!this.blocklistManager) {
+      this.logger.warn('Blocklist manager not initialized');
+      return null;
+    }
+
+    if (!this.vrchatAPI) {
+      this.logger.warn('VRChat API not initialized');
+      return null;
+    }
+
+    try {
+      // First, get the user profile to get their display name
+      const profile = await this.vrchatAPI.getUserProfile(userId);
+      const displayName = profile.displayName || 'Unknown User';
+
+      this.logger.info(`Manually checking user: ${displayName} (${userId})`);
+
+      // Check against blocklist
+      const result = await this.blocklistManager.checkUser(userId, displayName);
+
+      if (result.matched) {
+        this.logger.warn(`Manual check: User matched blocklist`, {
+          userId,
+          displayName,
+          matchCount: result.matches.length,
+        });
+      } else {
+        this.logger.info(`Manual check: No matches found for user ${displayName}`);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(`Error manually checking user ${userId}`, { error });
+      throw error;
+    }
+  }
+
+  /**
    * Send test alert on all notification channels
    */
   public async sendTestAlert(): Promise<void> {

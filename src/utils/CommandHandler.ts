@@ -2,6 +2,7 @@ import * as readline from 'readline';
 import chalk from 'chalk';
 import { VRChatMonitor } from '../core/VRChatMonitor';
 import { APP_VERSION, APP_NAME, APP_BUILD } from '../version';
+import { Logger } from './Logger';
 
 export interface Command {
   name: string;
@@ -90,6 +91,105 @@ export class CommandHandler {
         } else {
           console.log(chalk.yellow('⚠ Blocklist update failed or not configured'));
         }
+        console.log();
+      },
+    });
+
+    // Check user ID command
+    this.registerCommand({
+      name: 'checkid',
+      aliases: ['check', 'lookup'],
+      description: 'Manually check a user ID against the blocklist',
+      usage: 'checkid <user_id>',
+      handler: async (args) => {
+        if (args.length === 0) {
+          console.log();
+          console.log(chalk.red('❌ Error: User ID is required'));
+          console.log(chalk.gray('   Usage: checkid <user_id>'));
+          console.log(chalk.gray('   Example: checkid usr_12345678-1234-1234-1234-123456789abc'));
+          console.log();
+          return;
+        }
+
+        const userId = args[0];
+
+        // Validate user ID format (VRChat user IDs start with usr_)
+        if (!userId.startsWith('usr_')) {
+          console.log();
+          console.log(chalk.yellow('⚠ Warning: User ID should start with "usr_"'));
+          console.log(chalk.gray('   Continuing anyway...'));
+          console.log();
+        }
+
+        console.log();
+        console.log(chalk.cyan.bold(`🔍 Checking user ID: ${userId}`));
+        console.log(chalk.gray('═'.repeat(61)));
+        console.log();
+
+        try {
+          const result = await this.monitor.checkUserById(userId);
+
+          if (!result) {
+            console.log(chalk.red('✗ Failed to check user - monitor may not be initialized'));
+            console.log();
+            return;
+          }
+
+          // Display user info
+          console.log(chalk.white.bold('User Information:'));
+          console.log(chalk.gray(`  User ID: ${result.userId}`));
+          console.log(chalk.gray(`  Display Name: ${result.displayName}`));
+          console.log();
+
+          // Display match results
+          if (result.matched) {
+            console.log(chalk.red.bold(`⚠️ MATCH DETECTED - ${result.matches.length} issue(s) found`));
+            console.log();
+
+            for (let i = 0; i < result.matches.length; i++) {
+              const match = result.matches[i];
+              const severityColor =
+                match.severity === 'high' ? chalk.red :
+                match.severity === 'medium' ? chalk.yellow :
+                chalk.white;
+
+              console.log(severityColor(`  ${i + 1}. ${match.type.toUpperCase()}`));
+              console.log(chalk.gray(`     Severity: ${match.severity}`));
+              console.log(chalk.gray(`     Details: ${match.details}`));
+
+              if (match.groupId) {
+                console.log(chalk.gray(`     Group ID: ${match.groupId}`));
+              }
+              if (match.groupName) {
+                console.log(chalk.gray(`     Group Name: ${match.groupName}`));
+              }
+              if (match.keyword) {
+                console.log(chalk.gray(`     Keyword Pattern: ${match.keyword}`));
+              }
+              if (match.matchedText) {
+                console.log(chalk.gray(`     Matched Text: ${match.matchedText}`));
+              }
+              if (match.reason) {
+                console.log(chalk.gray(`     Reason: ${match.reason}`));
+              }
+              if (match.author) {
+                console.log(chalk.gray(`     Author: ${match.author}`));
+              }
+
+              console.log();
+            }
+          } else {
+            console.log(chalk.green('✓ No matches found - User appears clean'));
+            console.log();
+          }
+
+        } catch (error) {
+          console.log(chalk.red('✗ Error checking user ID:'));
+          console.log(chalk.gray(`   ${error instanceof Error ? error.message : String(error)}`));
+          console.log();
+        }
+
+        console.log(chalk.gray('═'.repeat(61)));
         console.log();
       },
     });
@@ -197,6 +297,13 @@ export class CommandHandler {
 
     // Show initial prompt
     this.showPrompt();
+
+    // Register callback to redraw prompt after log output
+    Logger.setLogOutputCallback(() => {
+      if (this.isActive && process.stdin.isTTY) {
+        this.redrawPromptAfterLog();
+      }
+    });
 
     // Set stdin to raw mode to capture each keypress
     if (process.stdin.isTTY) {
@@ -315,6 +422,26 @@ export class CommandHandler {
   }
 
   /**
+   * Redraw prompt after log output (doesn't clear line first)
+   */
+  private redrawPromptAfterLog(): void {
+    if (!this.isActive) {
+      return;
+    }
+
+    // Move to beginning of line and redraw prompt with current input
+    process.stdout.write('\n');
+    this.showPrompt();
+    process.stdout.write(this.currentInput);
+
+    // Move cursor to correct position
+    const offset = this.currentInput.length - this.cursorPosition;
+    if (offset > 0) {
+      process.stdout.write(`\x1b[${offset}D`); // Move cursor left
+    }
+  }
+
+  /**
    * Stop interactive command prompt
    */
   public stop(): void {
@@ -323,6 +450,9 @@ export class CommandHandler {
     }
 
     this.isActive = false;
+
+    // Clear the log output callback
+    Logger.clearLogOutputCallback();
 
     // Restore normal terminal mode
     if (process.stdin.isTTY) {

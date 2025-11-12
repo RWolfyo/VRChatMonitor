@@ -4,6 +4,7 @@ import { LogLevel } from '../types/config';
 export class Logger {
   private logger: winston.Logger;
   private static instance: Logger;
+  private static onLogCallback?: () => void;
 
   private constructor(level: LogLevel = 'info', enableFile: boolean = false) {
     // Map our custom 'verbose' level to Winston's 'silly' level
@@ -63,22 +64,44 @@ export class Logger {
 
   public error(message: string, meta?: Record<string, unknown>): void {
     this.logger.error(message, meta);
+    this.notifyLogOutput();
   }
 
   public warn(message: string, meta?: Record<string, unknown>): void {
     this.logger.warn(message, meta);
+    this.notifyLogOutput();
   }
 
   public info(message: string, meta?: Record<string, unknown>): void {
     this.logger.info(message, meta);
+    this.notifyLogOutput();
   }
 
   public debug(message: string, meta?: Record<string, unknown>): void {
     this.logger.debug(message, meta);
+    this.notifyLogOutput();
   }
 
   public verbose(message: string, meta?: Record<string, unknown>): void {
     this.logger.silly(message, meta);
+    this.notifyLogOutput();
+  }
+
+  private notifyLogOutput(): void {
+    if (Logger.onLogCallback) {
+      // Use setImmediate to ensure the log is written before the prompt is redrawn
+      setImmediate(() => {
+        Logger.onLogCallback?.();
+      });
+    }
+  }
+
+  public static setLogOutputCallback(callback: () => void): void {
+    Logger.onLogCallback = callback;
+  }
+
+  public static clearLogOutputCallback(): void {
+    Logger.onLogCallback = undefined;
   }
 
   public setLevel(level: LogLevel): void {
