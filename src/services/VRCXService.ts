@@ -134,7 +134,7 @@ export class VRCXService {
       const success = await this.sendIpcPacket(packet);
 
       if (success) {
-        this.logger.info('✓ VRCX notification sent successfully', {
+        this.logger.debug('✓ VRCX notification sent successfully', {
           message: message.substring(0, 30) + '...',
           note: 'Check VRCX settings -> Notifications for OVRToolkit integration',
         });
@@ -181,7 +181,7 @@ export class VRCXService {
           const json = JSON.stringify(packet);
           const buffer = Buffer.from(json, 'utf-8');
 
-          this.logger.info('VRCX IPC connected, sending packet:', {
+          this.logger.debug('VRCX IPC connected, sending packet:', {
             rawJson: json,
             jsonLength: json.length,
             bufferLength: buffer.length,
@@ -196,8 +196,8 @@ export class VRCXService {
           // Close connection
           client.end();
 
-          this.logger.info('✓ VRCX packet sent to pipe successfully');
-          this.logger.info('→ Check VRCX Game Log tab for "External" entry to verify receipt');
+          this.logger.debug('✓ VRCX packet sent to pipe successfully');
+          this.logger.debug('→ Check VRCX Game Log tab for "External" entry to verify receipt');
           resolve(true);
         } catch (error) {
           this.logger.error('Error writing to VRCX pipe', { error });
@@ -288,7 +288,7 @@ export class VRCXService {
             });
             resolve(false);
           } else {
-            this.logger.info('XSOverlay notification sent successfully', { title });
+            this.logger.debug('XSOverlay notification sent successfully', { title });
             resolve(true);
           }
         });

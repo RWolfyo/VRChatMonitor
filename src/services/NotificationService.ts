@@ -70,7 +70,7 @@ export class NotificationService {
         }
       });
 
-      this.logger.info('Desktop notification sent', { title: options.title });
+      this.logger.debug('Desktop notification sent', { title: options.title });
     } catch (error) {
       this.logger.error('Failed to send desktop notification', { error });
     }
