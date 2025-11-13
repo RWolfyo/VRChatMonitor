@@ -249,6 +249,12 @@ export class VRChatMonitor extends EventEmitter {
   private async handlePlayerJoin(event: PlayerJoinEvent): Promise<void> {
     const { userId, displayName } = event;
 
+    // Skip if it's the current user (check this first before any logging)
+    if (this.vrchatAPI?.isCurrentUser(userId)) {
+      this.logger.debug(`Ignoring join event for current user: ${displayName} (${userId})`);
+      return;
+    }
+
     // Deduplicate recent joins
     const lastJoinTime = this.recentJoins.get(userId);
     if (lastJoinTime && Date.now() - lastJoinTime < this.DEDUPE_WINDOW_MS) {
@@ -260,12 +266,6 @@ export class VRChatMonitor extends EventEmitter {
     this.cleanupOldJoins();
 
     this.logger.info(`Player joined: ${displayName} (${userId})`);
-
-    // Skip if it's the current user
-    if (this.vrchatAPI?.isCurrentUser(userId)) {
-      this.logger.debug('Ignoring join event for current user');
-      return;
-    }
 
     // Check against blocklist
     try {
