@@ -186,8 +186,25 @@ export class BlocklistManager extends EventEmitter {
         this.db = null;
       }
 
+      // Wait a bit for file handles to be fully released (Windows issue)
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       fs.renameSync(tempPath, this.blocklistPath);
+
+      // Wait again before reopening
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Reopen database
       this.db = new this.Database(this.blocklistPath);
+
+      // Verify database is readable
+      try {
+        const testStats = this.getStats();
+        this.logger.debug('Database reopened successfully', testStats);
+      } catch (error) {
+        this.logger.error('Database verification failed after update', { error });
+        throw new Error('Database corrupted after update');
+      }
 
       // Recompile patterns
       this.compileKeywordPatterns();
