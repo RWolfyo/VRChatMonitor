@@ -5,6 +5,8 @@ export class Logger {
   private logger: winston.Logger;
   private static instance: Logger;
   private static onLogCallback?: () => void;
+  private static logBuffer: string[] = [];
+  private static readonly MAX_BUFFER_SIZE = 500; // Keep last 500 log entries
 
   private constructor(level: LogLevel = 'info', enableFile: boolean = false) {
     // Map our custom 'verbose' level to Winston's 'silly' level
@@ -73,23 +75,44 @@ export class Logger {
     Logger.instance = new Logger(level, enableFile);
   }
 
+  private addToBuffer(level: string, message: string, meta?: Record<string, unknown>): void {
+    const timestamp = new Date().toISOString();
+    let logLine = `[${timestamp}] ${level.toUpperCase()}: ${message}`;
+
+    if (meta && Object.keys(meta).length > 0) {
+      logLine += ` ${JSON.stringify(meta)}`;
+    }
+
+    Logger.logBuffer.push(logLine);
+
+    // Keep buffer size limited
+    if (Logger.logBuffer.length > Logger.MAX_BUFFER_SIZE) {
+      Logger.logBuffer.shift();
+    }
+  }
+
   public error(message: string, meta?: Record<string, unknown>): void {
+    this.addToBuffer('error', message, meta);
     this.logger.error(message, meta);
   }
 
   public warn(message: string, meta?: Record<string, unknown>): void {
+    this.addToBuffer('warn', message, meta);
     this.logger.warn(message, meta);
   }
 
   public info(message: string, meta?: Record<string, unknown>): void {
+    this.addToBuffer('info', message, meta);
     this.logger.info(message, meta);
   }
 
   public debug(message: string, meta?: Record<string, unknown>): void {
+    this.addToBuffer('debug', message, meta);
     this.logger.debug(message, meta);
   }
 
   public verbose(message: string, meta?: Record<string, unknown>): void {
+    this.addToBuffer('verbose', message, meta);
     this.logger.silly(message, meta);
   }
 
@@ -104,5 +127,13 @@ export class Logger {
   public setLevel(level: LogLevel): void {
     const winstonLevel = level === 'verbose' ? 'silly' : level;
     this.logger.level = winstonLevel;
+  }
+
+  public static getLogBuffer(): string[] {
+    return [...Logger.logBuffer];
+  }
+
+  public static clearLogBuffer(): void {
+    Logger.logBuffer = [];
   }
 }

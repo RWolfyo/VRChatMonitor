@@ -5,6 +5,88 @@ import { Logger } from './utils/Logger';
 import { CommandHandler } from './utils/CommandHandler';
 import { APP_VERSION } from './version';
 import chalk from 'chalk';
+import * as fs from 'fs';
+import * as path from 'path';
+
+/**
+ * Write crash log to file
+ */
+function writeCrashLog(error: Error | any, type: string = 'crash'): string {
+  try {
+    // Get executable directory or current directory
+    const execDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
+    const crashDir = path.join(execDir, 'crashes');
+
+    // Create crashes directory if it doesn't exist
+    if (!fs.existsSync(crashDir)) {
+      fs.mkdirSync(crashDir, { recursive: true });
+    }
+
+    // Generate filename with timestamp
+    const now = new Date();
+    const timestamp = now.toISOString().replace(/:/g, '-').replace(/\..+/, '');
+    const filename = `crash-${timestamp}.log`;
+    const filepath = path.join(crashDir, filename);
+
+    // Get recent logs from buffer
+    const logBuffer = Logger.getLogBuffer();
+
+    // Build crash report
+    const report = [
+      '═'.repeat(70),
+      `VRChat Monitor v${APP_VERSION} - Crash Report`,
+      '═'.repeat(70),
+      '',
+      `Type: ${type}`,
+      `Date: ${now.toISOString()}`,
+      `Platform: ${process.platform} ${process.arch}`,
+      `Node Version: ${process.version}`,
+      '',
+      '═'.repeat(70),
+      'Application Log (Last 500 entries):',
+      '═'.repeat(70),
+      '',
+    ];
+
+    // Add log buffer
+    if (logBuffer.length > 0) {
+      report.push(...logBuffer);
+    } else {
+      report.push('(No logs available)');
+    }
+
+    report.push('');
+    report.push('═'.repeat(70));
+    report.push('Error Details:');
+    report.push('═'.repeat(70));
+    report.push('');
+
+    if (error instanceof Error) {
+      report.push(`Message: ${error.message}`);
+      report.push('');
+      if (error.stack) {
+        report.push('Stack Trace:');
+        report.push(error.stack);
+      }
+    } else {
+      report.push(`Error: ${String(error)}`);
+    }
+
+    report.push('');
+    report.push('═'.repeat(70));
+    report.push('End of Crash Report');
+    report.push('═'.repeat(70));
+
+    // Write to file
+    fs.writeFileSync(filepath, report.join('\n'), 'utf-8');
+
+    return filepath;
+  } catch (writeError) {
+    // If we can't write the crash log, just log to console
+    console.error('Failed to write crash log:', writeError);
+    return '';
+  }
+}
 
 /**
  * Create a centered line within the box (59 chars wide)
@@ -150,6 +232,9 @@ async function main() {
     console.error(chalk.red.bold('═'.repeat(61)));
     console.error();
 
+    // Write crash log
+    const crashLogPath = writeCrashLog(error, 'Fatal Error');
+
     if (error instanceof Error) {
       console.error(chalk.red(error.message));
 
@@ -193,6 +278,13 @@ async function main() {
 
     console.error();
     console.error(chalk.red.bold('═'.repeat(61)));
+
+    // Show crash log location
+    if (crashLogPath) {
+      console.error();
+      console.error(chalk.yellow(`📝 Crash log saved to: ${crashLogPath}`));
+    }
+
     console.error();
 
     // Cleanup
@@ -282,12 +374,26 @@ function getLocationLabel(location: string): string {
 process.on('uncaughtException', (error) => {
   console.error();
   console.error(chalk.red.bold('Uncaught Exception:'), error);
+
+  const crashLogPath = writeCrashLog(error, 'Uncaught Exception');
+  if (crashLogPath) {
+    console.error();
+    console.error(chalk.yellow(`📝 Crash log saved to: ${crashLogPath}`));
+  }
+
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason) => {
   console.error();
   console.error(chalk.red.bold('Unhandled Rejection:'), reason);
+
+  const crashLogPath = writeCrashLog(reason, 'Unhandled Rejection');
+  if (crashLogPath) {
+    console.error();
+    console.error(chalk.yellow(`📝 Crash log saved to: ${crashLogPath}`));
+  }
+
   process.exit(1);
 });
 
