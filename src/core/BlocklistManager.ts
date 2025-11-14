@@ -21,6 +21,7 @@ import {
   BLOCKLIST_DOWNLOAD_TIMEOUT_MS,
   MINUTES_TO_MS,
 } from '../constants';
+import { createErrorContext } from '../utils/ErrorUtils';
 
 export class BlocklistManager extends EventEmitter {
   private logger: Logger;
@@ -270,10 +271,9 @@ export class BlocklistManager extends EventEmitter {
       };
       this.emit('blocklistUpdated', event);
     } catch (error) {
-      this.logger.error('Failed to update blocklist from remote', {
-        error: error instanceof Error ? error.message : String(error),
+      this.logger.error('Failed to update blocklist from remote', createErrorContext(error, {
         url: this.remoteUrl,
-      });
+      }));
     } finally {
       this.updateInProgress = false;
 
@@ -377,37 +377,98 @@ export class BlocklistManager extends EventEmitter {
   }
 
   /**
-   * Check if hostname is a private IP or localhost
+   * Check if hostname is a private IP or localhost (SSRF protection)
    */
   private isPrivateHost(hostname: string): boolean {
-    // Check for localhost variations
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    // Normalize hostname (lowercase, remove brackets from IPv6)
+    const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+
+    // Check for localhost variations (including DNS tricks)
+    const localhostPatterns = [
+      'localhost',
+      'localhost.localdomain',
+      'localtest.me', // DNS that resolves to 127.0.0.1
+      'lvh.me', // Another localhost alias
+      '127.0.0.1',
+      '0.0.0.0',
+      '::1',
+      '::',
+      '0:0:0:0:0:0:0:1',
+      '0:0:0:0:0:0:0:0',
+    ];
+
+    if (localhostPatterns.some(pattern => normalized === pattern)) {
       return true;
     }
 
-    // Check for private IPv4 ranges
+    // Check for IPv4 addresses (including alternative notations)
     const ipv4Pattern = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/;
-    const match = hostname.match(ipv4Pattern);
+    const match = normalized.match(ipv4Pattern);
     if (match) {
       const octets = match.slice(1).map(Number);
-      const [a, b] = octets;
 
-      // 10.0.0.0/8
+      // Validate octets are in valid range
+      if (octets.some(octet => octet < 0 || octet > 255)) {
+        return true; // Invalid IP, treat as suspicious
+      }
+
+      const [a, b, c] = octets;
+
+      // 0.0.0.0/8 (current network)
+      if (a === 0) return true;
+      // 10.0.0.0/8 (private)
       if (a === 10) return true;
-      // 172.16.0.0/12
+      // 127.0.0.0/8 (loopback)
+      if (a === 127) return true;
+      // 172.16.0.0/12 (private)
       if (a === 172 && b >= 16 && b <= 31) return true;
-      // 192.168.0.0/16
+      // 192.168.0.0/16 (private)
       if (a === 192 && b === 168) return true;
       // 169.254.0.0/16 (link-local)
       if (a === 169 && b === 254) return true;
+      // 192.0.0.0/24 (IETF Protocol Assignments)
+      if (a === 192 && b === 0 && c === 0) return true;
+      // 192.0.2.0/24 (TEST-NET-1)
+      if (a === 192 && b === 0 && c === 2) return true;
+      // 198.51.100.0/24 (TEST-NET-2)
+      if (a === 198 && b === 51 && c === 100) return true;
+      // 203.0.113.0/24 (TEST-NET-3)
+      if (a === 203 && b === 0 && c === 113) return true;
+      // 224.0.0.0/4 (multicast)
+      if (a >= 224 && a <= 239) return true;
+      // 240.0.0.0/4 (reserved)
+      if (a >= 240) return true;
+      // 100.64.0.0/10 (shared address space / carrier-grade NAT)
+      if (a === 100 && b >= 64 && b <= 127) return true;
     }
 
-    // Check for private IPv6 ranges
-    if (hostname.includes(':')) {
+    // Check for IPv6 private ranges (including alternative notations)
+    if (normalized.includes(':')) {
+      // IPv4-mapped IPv6 addresses (::ffff:192.168.1.1)
+      if (normalized.includes('::ffff:')) {
+        const ipv4Part = normalized.split('::ffff:')[1];
+        if (ipv4Part) {
+          return this.isPrivateHost(ipv4Part); // Recursively check the IPv4 part
+        }
+      }
+
       // fc00::/7 (unique local address)
-      if (hostname.startsWith('fc') || hostname.startsWith('fd')) return true;
+      if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
       // fe80::/10 (link-local)
-      if (hostname.startsWith('fe80')) return true;
+      if (normalized.startsWith('fe80')) return true;
+      // fec0::/10 (deprecated site-local)
+      if (normalized.startsWith('fec')) return true;
+      // :: (unspecified)
+      if (normalized === '::') return true;
+      // ::1 (loopback - already checked above but double-check)
+      if (normalized.startsWith('::1') || normalized === '0:0:0:0:0:0:0:1') return true;
+    }
+
+    // Check for DNS rebinding attempts (numeric hostname that's not an IP)
+    // This catches edge cases like "2130706433" (decimal representation of 127.0.0.1)
+    if (/^\d+$/.test(normalized)) {
+      this.logger.warn('Blocked suspicious numeric hostname (potential DNS rebinding)', { hostname });
+      return true;
     }
 
     return false;
@@ -480,10 +541,9 @@ export class BlocklistManager extends EventEmitter {
         groups: groups.map(g => ({ id: g.id, groupId: g.groupId, name: g.name, description: g.description }))
       });
     } catch (error) {
-      this.logger.error('Failed to fetch user groups - cannot verify group membership', {
-        userId,
-        error: error instanceof Error ? error.message : String(error)
-      });
+      this.logger.error('Failed to fetch user groups - cannot verify group membership', createErrorContext(error, {
+        userId
+      }));
       // Don't return - we can still check keywords in profile
       // But add a warning match to alert about the API failure
       matches.push({
@@ -646,10 +706,9 @@ export class BlocklistManager extends EventEmitter {
         }
       }
     } catch (error) {
-      this.logger.warn('Failed to fetch user profile for keyword check - profile patterns not verified', {
+      this.logger.warn('Failed to fetch user profile for keyword check - profile patterns not verified', createErrorContext(error, {
         userId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      }));
       // Profile keyword check failed - this is less critical than group check
       // Only log the warning, don't add a match
     }

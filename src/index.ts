@@ -11,6 +11,7 @@ import {
   BANNER_CONTENT_WIDTH,
   LOG_BUFFER_MAX_SIZE,
 } from './constants';
+import { sanitizeLogBuffer, sanitizeSensitiveData } from './utils/ErrorUtils';
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -36,8 +37,9 @@ function writeCrashLog(error: Error | any, type: string = 'crash'): string {
     const filename = `crash-${timestamp}.log`;
     const filepath = path.join(crashDir, filename);
 
-    // Get recent logs from buffer
+    // Get recent logs from buffer and sanitize sensitive data
     const logBuffer = Logger.getLogBuffer();
+    const sanitizedLogs = sanitizeLogBuffer(logBuffer);
 
     // Build crash report
     const report = [
@@ -50,15 +52,17 @@ function writeCrashLog(error: Error | any, type: string = 'crash'): string {
       `Platform: ${process.platform} ${process.arch}`,
       `Node Version: ${process.version}`,
       '',
+      '⚠️  NOTICE: Sensitive data (passwords, tokens, IDs) has been redacted from this log.',
+      '',
       '═'.repeat(CRASH_REPORT_SEPARATOR_WIDTH),
       `Application Log (Last ${LOG_BUFFER_MAX_SIZE} entries):`,
       '═'.repeat(CRASH_REPORT_SEPARATOR_WIDTH),
       '',
     ];
 
-    // Add log buffer
-    if (logBuffer.length > 0) {
-      report.push(...logBuffer);
+    // Add sanitized log buffer
+    if (sanitizedLogs.length > 0) {
+      report.push(...sanitizedLogs);
     } else {
       report.push('(No logs available)');
     }
@@ -70,14 +74,14 @@ function writeCrashLog(error: Error | any, type: string = 'crash'): string {
     report.push('');
 
     if (error instanceof Error) {
-      report.push(`Message: ${error.message}`);
+      report.push(`Message: ${sanitizeSensitiveData(error.message)}`);
       report.push('');
       if (error.stack) {
         report.push('Stack Trace:');
-        report.push(error.stack);
+        report.push(sanitizeSensitiveData(error.stack));
       }
     } else {
-      report.push(`Error: ${String(error)}`);
+      report.push(`Error: ${sanitizeSensitiveData(String(error))}`);
     }
 
     report.push('');

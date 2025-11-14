@@ -29,7 +29,7 @@ export interface CachedResponse<T> {
 }
 
 export interface StoredSession {
-  cookies: any;
+  cookies: any; // Marker field - actual cookies managed by VRChat SDK in Keyv
   timestamp: number;
   expiresAt?: number;
 }
