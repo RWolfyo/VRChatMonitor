@@ -539,9 +539,22 @@ REM Copy new executable and all files from extracted directory
 echo Copying new files...
 xcopy /E /I /Y "${path.dirname(newExePath)}\\*" "${execDir}\\" 2>NUL
 
-REM Cleanup temp directory
+REM Cleanup - delete any leftover update.zip files
 timeout /t 1 /nobreak > nul
-if exist "${tempDir}" rmdir /S /Q "${tempDir}" 2>NUL
+if exist "${execDir}\\update.zip" del /F /Q "${execDir}\\update.zip" 2>NUL
+if exist "${tempDir}\\update.zip" del /F /Q "${tempDir}\\update.zip" 2>NUL
+
+REM Cleanup - remove temp directory and all contents
+timeout /t 1 /nobreak > nul
+if exist "${tempDir}" (
+    echo Cleaning up temporary files...
+    rmdir /S /Q "${tempDir}" 2>NUL
+    if exist "${tempDir}" (
+        REM Retry cleanup if first attempt failed
+        timeout /t 2 /nobreak > nul
+        rmdir /S /Q "${tempDir}" 2>NUL
+    )
+)
 
 REM Restart application
 echo Starting VRChat Monitor...
