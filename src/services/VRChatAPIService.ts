@@ -333,11 +333,10 @@ export class VRChatAPIService {
       const newTimestamp = Date.now();
       const newExpiry = newTimestamp + SESSION_EXPIRY_MS;
 
-      // Get existing session to preserve cookies (VRChat SDK manages cookies separately in Keyv)
-      const existingSession = await this.keyv.get('session') as StoredSession;
-
+      // Store session metadata - VRChat SDK manages its own cookies in Keyv
+      // We just track when the session was created/refreshed and when it expires
       await this.keyv.set('session', {
-        cookies: existingSession?.cookies || null, // Preserve existing cookies reference
+        cookies: true, // Marker that a session exists (cookies are managed by VRChat SDK)
         timestamp: newTimestamp,
         expiresAt: newExpiry,
       } as StoredSession);
