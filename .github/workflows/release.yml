@@ -64,7 +64,15 @@ jobs:
         run: |
           Write-Host "Preparing release package..."
 
-          $zipName = "vrc-monitor-windows-x64.zip"
+          # Get version for filename
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ inputs.version }}"
+          } else {
+            $version = "${{ github.ref_name }}"
+          }
+
+          # Create versioned release filename
+          $zipName = "VRChatMonitor-$version-RELEASE-Windows-x64.zip"
 
           # The SEA build script already creates dist/vrc-monitor/ with all files
           # Just verify it exists
@@ -193,13 +201,13 @@ jobs:
           make_latest: true
           generate_release_notes: false
           files: |
-            vrc-monitor-windows-x64.zip
+            VRChatMonitor-${{ steps.get_version.outputs.version }}-RELEASE-Windows-x64.zip
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: vrc-monitor-${{ steps.get_version.outputs.version }}
           path: |
-            vrc-monitor-windows-x64.zip
+            VRChatMonitor-${{ steps.get_version.outputs.version }}-RELEASE-Windows-x64.zip
             RELEASE_NOTES.md
           retention-days: 30

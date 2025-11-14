@@ -234,12 +234,20 @@ ${centerLine('')}
     try {
       this.logger.info('📦 Downloading update...');
 
-      // Find the ZIP asset
-      const zipAsset = release.assets.find(asset => asset.name.endsWith('.zip'));
+      // Find the RELEASE ZIP asset (not source code)
+      // Looking for: VRChatMonitor-vX.X.X-RELEASE-Windows-x64.zip
+      const zipAsset = release.assets.find(asset =>
+        asset.name.includes('RELEASE') &&
+        asset.name.endsWith('.zip') &&
+        !asset.name.toLowerCase().includes('source')
+      );
 
       if (!zipAsset) {
-        throw new Error('No ZIP file found in release assets');
+        this.logger.error('Release assets:', release.assets.map(a => a.name));
+        throw new Error('No RELEASE ZIP file found in release assets. Make sure the release was built correctly.');
       }
+
+      this.logger.debug(`Found release asset: ${zipAsset.name}`);
 
       // Get executable directory
       const execDir = path.dirname(process.execPath);

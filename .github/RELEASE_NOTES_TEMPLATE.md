@@ -1,5 +1,19 @@
 # VRChat Monitor - Release {VERSION}
 
+---
+
+# ⚠️ IMPORTANT - DOWNLOAD INSTRUCTIONS
+
+## ✅ **Download the RELEASE ZIP file below**
+### 📦 **`VRChatMonitor-{VERSION}-RELEASE-Windows-x64.zip`**
+
+## ❌ **DO NOT download "Source code (zip)" or "Source code (tar.gz)"**
+Those are raw source files and will NOT work!
+
+**You need the compiled RELEASE package with the `.exe` file included.**
+
+---
+
 ## Changes
 
 {CHANGELOG}
@@ -24,10 +38,10 @@
 
 ## Installation
 
-1. Download `vrc-monitor-windows-x64.zip`
-2. Extract to a folder of your choice
-3. Run `vrc-monitor.exe`
-4. Enter your VRChat credentials when prompted
+1. **Download** `VRChatMonitor-{VERSION}-RELEASE-Windows-x64.zip` from the Assets section below
+2. **Extract** to a folder of your choice
+3. **Run** `vrc-monitor.exe`
+4. **Enter** your VRChat credentials when prompted
 
 ## Interactive Commands
 
