@@ -428,6 +428,14 @@ export class VRChatMonitor extends EventEmitter {
   }
 
   /**
+   * Disable command input (for long-running operations like updates)
+   * This prevents users from issuing commands while an operation is in progress
+   */
+  public setCommandInputDisabled(disabled: boolean): void {
+    this.emit('commandInputDisabled', disabled);
+  }
+
+  /**
    * Get monitor status
    */
   public getStatus(): {

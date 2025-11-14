@@ -282,12 +282,17 @@ export class CommandHandler {
         console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
         console.log();
 
+        // Disable command input during update
+        this.monitor.setCommandInputDisabled(true);
+
         const success = await this.monitor.performUpdate();
 
         if (!success) {
           console.log();
           console.log(chalk.yellow('⚠ Update failed or cancelled'));
           console.log();
+          // Re-enable input if update fails
+          this.monitor.setCommandInputDisabled(false);
         }
         // If successful, the app will restart automatically
       },
@@ -324,6 +329,20 @@ export class CommandHandler {
   }
 
   /**
+   * Temporarily disable command input (for operations like updates)
+   */
+  public disableInput(): void {
+    this.isExecutingCommand = true;
+  }
+
+  /**
+   * Re-enable command input
+   */
+  public enableInput(): void {
+    this.isExecutingCommand = false;
+  }
+
+  /**
    * Start interactive command prompt with manual input handling
    */
   public start(): void {
@@ -356,6 +375,15 @@ export class CommandHandler {
     Logger.setLogOutputCallback(() => {
       if (this.isActive && process.stdin.isTTY) {
         this.redrawPromptAfterLog();
+      }
+    });
+
+    // Listen for command input disable/enable events
+    this.monitor.on('commandInputDisabled', (disabled: boolean) => {
+      if (disabled) {
+        this.disableInput();
+      } else {
+        this.enableInput();
       }
     });
 
@@ -581,11 +609,8 @@ export class CommandHandler {
     this.promptRedrawTimer = setTimeout(() => {
       // Only redraw if we're not currently executing a command
       if (!this.isExecutingCommand) {
-        // Clear the current line (which may have a partial prompt)
-        process.stdout.write('\r'); // Move to beginning of line
-        process.stdout.clearLine(0); // Clear entire line
-
-        // Redraw prompt with current input
+        // The logger already printed newlines, so just redraw the prompt on the current line
+        // No need to add extra newlines
         this.showPrompt();
         process.stdout.write(this.currentInput);
 
