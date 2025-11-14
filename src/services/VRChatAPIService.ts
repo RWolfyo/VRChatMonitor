@@ -222,7 +222,14 @@ export class VRChatAPIService {
         this.currentUser = user;
         this.sessionTimestamp = storedSession.timestamp;
 
-        this.logger.info(`✓ Logged in as: ${user.displayName} (session reuse)`, {
+        // Debug: log the user object structure
+        this.logger.debug('Session reuse user object', {
+          hasDisplayName: !!user.displayName,
+          hasUsername: !!user.username,
+          keys: Object.keys(user).slice(0, 10)
+        });
+
+        this.logger.info(`✓ Logged in as: ${user.displayName || user.username || 'Unknown'} (session reuse)`, {
           userId: user.id,
         });
 
@@ -364,7 +371,10 @@ export class VRChatAPIService {
       if (response.error) {
         throw new Error(response.error.message);
       }
-      return response.data;
+
+      // Handle case where response.data might be wrapped
+      const userData = response.data || response;
+      return userData;
     } catch (error) {
       this.logger.error('Failed to get current user', { error });
       throw error;
