@@ -88,7 +88,7 @@ export const UPDATE_DOWNLOAD_TIMEOUT_MS = 120000; // 2 minutes
 // Command Handler
 // ============================================================================
 export const MONITOR_RESTART_DELAY_MS = 1000;
-export const COMMAND_PROMPT_REDRAW_DEBOUNCE_MS = 50;
+export const COMMAND_PROMPT_REDRAW_DEBOUNCE_MS = 100;
 
 // ============================================================================
 // Keyv Store

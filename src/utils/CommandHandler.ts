@@ -600,15 +600,15 @@ export class CommandHandler {
       return;
     }
 
-    // Clear any existing timer
+    // Clear any existing timer to reset the debounce
     if (this.promptRedrawTimer) {
       clearTimeout(this.promptRedrawTimer);
     }
 
-    // Debounce: only redraw after logs have stopped for 50ms
+    // Debounce: only redraw after logs have stopped
     this.promptRedrawTimer = setTimeout(() => {
       // Only redraw if we're not currently executing a command
-      if (!this.isExecutingCommand) {
+      if (!this.isExecutingCommand && this.isActive) {
         // Clear any partial prompt from the current line and redraw
         process.stdout.write('\r'); // Move to beginning of line
         process.stdout.write('\x1b[K'); // Clear to end of line
