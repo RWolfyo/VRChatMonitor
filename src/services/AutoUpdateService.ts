@@ -36,8 +36,14 @@ export class AutoUpdateService {
    * Check if running as packaged executable
    */
   private isPackaged(): boolean {
-    // @ts-expect-error - process.pkg is added by pkg bundler
-    return !!process.pkg;
+    // Check for Node.js SEA (Single Executable Application)
+    if (typeof process.isSea === 'function' && process.isSea()) {
+      return true;
+    }
+
+    // Fallback check for .exe extension (Windows-specific)
+    // This covers edge cases where isSea might not be available
+    return process.platform === 'win32' && process.execPath.endsWith('.exe') && !process.execPath.includes('node.exe');
   }
 
   /**
@@ -454,33 +460,39 @@ ${centerLine('')}
     const execDir = path.dirname(currentExePath);
     const scriptPath = path.join(execDir, 'update.bat');
 
+    const exeName = path.basename(currentExePath);
+
     const script = `@echo off
+title VRChat Monitor Update
 echo Updating VRChat Monitor...
 timeout /t 2 /nobreak > nul
 
 REM Wait for main process to exit
 :WAIT
-tasklist /FI "IMAGENAME eq ${path.basename(currentExePath)}" 2>NUL | find /I /N "${path.basename(currentExePath)}">NUL
-if "%ERRORLEVEL%"=="0" (
+tasklist /FI "IMAGENAME eq ${exeName}" 2>NUL | find /I "${exeName}" >NUL
+if %ERRORLEVEL% EQU 0 (
     timeout /t 1 /nobreak > nul
     goto WAIT
 )
 
 REM Backup current executable
-if exist "${currentExePath}.bak" del /F /Q "${currentExePath}.bak"
-move /Y "${currentExePath}" "${currentExePath}.bak"
+if exist "${currentExePath}.bak" del /F /Q "${currentExePath}.bak" 2>NUL
+move /Y "${currentExePath}" "${currentExePath}.bak" 2>NUL
 
-REM Copy new executable
-copy /Y "${newExePath}" "${currentExePath}"
+REM Copy new executable and all files from extracted directory
+echo Copying new files...
+xcopy /E /I /Y "${path.dirname(newExePath)}\\*" "${execDir}\\" 2>NUL
 
-REM Cleanup
+REM Cleanup temp directory
 timeout /t 1 /nobreak > nul
-rmdir /S /Q "${tempDir}"
+if exist "${tempDir}" rmdir /S /Q "${tempDir}" 2>NUL
 
 REM Restart application
+echo Starting VRChat Monitor...
 start "" "${currentExePath}"
 
 REM Delete this script
+timeout /t 1 /nobreak > nul
 del /F /Q "%~f0"
 `;
 
@@ -493,11 +505,13 @@ del /F /Q "%~f0"
   private executeUpdateScript(execDir: string): void {
     const scriptPath = path.join(execDir, 'update.bat');
 
-    // Start the update script detached
-    spawn('cmd.exe', ['/c', scriptPath], {
+    // Start the update script detached and minimized
+    // Using 'start /min' to minimize the window
+    spawn('cmd.exe', ['/c', 'start', '/min', 'cmd.exe', '/c', scriptPath], {
       detached: true,
       stdio: 'ignore',
       cwd: execDir,
+      windowsHide: false, // We want it minimized, not hidden (so user can see progress if needed)
     }).unref();
 
     // Exit current process
