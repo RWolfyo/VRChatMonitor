@@ -25,6 +25,7 @@ export class CommandHandler {
   private commandHistory: string[] = [];
   private historyIndex: number = -1;
   private promptRedrawTimer: NodeJS.Timeout | null = null;
+  private originalConsoleLog?: (...args: unknown[]) => void;
 
   constructor(monitor: VRChatMonitor) {
     this.monitor = monitor;
@@ -337,15 +338,21 @@ export class CommandHandler {
     console.log(chalk.gray('   Type "help" for available commands'));
     console.log();
 
-    // Show initial prompt
-    this.showPrompt();
-
     // Remove any existing listeners to prevent duplicates
     if (this.dataHandler) {
       process.stdin.removeListener('data', this.dataHandler);
     }
 
-    // Register callback to redraw prompt after log output
+    // Register callback to redraw prompt after log output (including console.log)
+    this.originalConsoleLog = console.log;
+    console.log = (...args: unknown[]) => {
+      this.originalConsoleLog!(...args);
+      // Trigger prompt redraw after console.log
+      if (this.isActive && process.stdin.isTTY) {
+        this.redrawPromptAfterLog();
+      }
+    };
+
     Logger.setLogOutputCallback(() => {
       if (this.isActive && process.stdin.isTTY) {
         this.redrawPromptAfterLog();
@@ -363,6 +370,9 @@ export class CommandHandler {
       await this.handleKeypress(key);
     };
     process.stdin.on('data', this.dataHandler);
+
+    // Show initial prompt AFTER all handlers are set up
+    this.showPrompt();
   }
 
   /**
@@ -571,8 +581,11 @@ export class CommandHandler {
     this.promptRedrawTimer = setTimeout(() => {
       // Only redraw if we're not currently executing a command
       if (!this.isExecutingCommand) {
-        // Move to beginning of line and redraw prompt with current input
-        process.stdout.write('\n');
+        // Clear the current line (which may have a partial prompt)
+        process.stdout.write('\r'); // Move to beginning of line
+        process.stdout.clearLine(0); // Clear entire line
+
+        // Redraw prompt with current input
         this.showPrompt();
         process.stdout.write(this.currentInput);
 
@@ -595,6 +608,12 @@ export class CommandHandler {
     }
 
     this.isActive = false;
+
+    // Restore original console.log
+    if (this.originalConsoleLog) {
+      console.log = this.originalConsoleLog;
+      this.originalConsoleLog = undefined;
+    }
 
     // Clear the log output callback
     Logger.clearLogOutputCallback();
