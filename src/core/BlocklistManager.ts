@@ -12,6 +12,14 @@ import {
 } from '../types/blocklist';
 import { BlocklistUpdatedEvent, VersionMismatchEvent } from '../types/events';
 import { APP_VERSION } from '../version';
+import {
+  REDOS_TEST_STRING_LENGTH,
+  REDOS_MAX_EXECUTION_TIME_MS,
+  FILE_HANDLE_RELEASE_DELAY_MS,
+  DATABASE_REOPEN_DELAY_MS,
+  HTTP_MAX_REDIRECTS,
+  BLOCKLIST_DOWNLOAD_TIMEOUT_MS,
+} from '../constants';
 
 export class BlocklistManager extends EventEmitter {
   private logger: Logger;
@@ -109,7 +117,7 @@ export class BlocklistManager extends EventEmitter {
 
         // Test regex for ReDoS vulnerability by timing execution
         // Test against a long string to detect catastrophic backtracking
-        const testString = 'x'.repeat(100);
+        const testString = 'x'.repeat(REDOS_TEST_STRING_LENGTH);
         const start = Date.now();
 
         try {
@@ -121,7 +129,7 @@ export class BlocklistManager extends EventEmitter {
 
         const duration = Date.now() - start;
 
-        if (duration > 100) {
+        if (duration > REDOS_MAX_EXECUTION_TIME_MS) {
           this.logger.warn(`Regex pattern too slow (${duration}ms), potential ReDoS - skipping: ${row.pattern}`);
           continue;
         }
@@ -187,12 +195,12 @@ export class BlocklistManager extends EventEmitter {
       }
 
       // Wait a bit for file handles to be fully released (Windows issue)
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, FILE_HANDLE_RELEASE_DELAY_MS));
 
       fs.renameSync(tempPath, this.blocklistPath);
 
       // Wait again before reopening
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, DATABASE_REOPEN_DELAY_MS));
 
       // Reopen database
       this.db = new this.Database(this.blocklistPath);
@@ -248,10 +256,7 @@ export class BlocklistManager extends EventEmitter {
    * Download file from URL with SSRF protection and timeout
    */
   private async downloadFile(url: string, dest: string, redirectCount: number = 0): Promise<void> {
-    const MAX_REDIRECTS = 5;
-    const DOWNLOAD_TIMEOUT_MS = 30000; // 30 seconds
-
-    if (redirectCount > MAX_REDIRECTS) {
+    if (redirectCount > HTTP_MAX_REDIRECTS) {
       throw new Error(`Too many redirects (${redirectCount})`);
     }
 
@@ -278,7 +283,7 @@ export class BlocklistManager extends EventEmitter {
       const file = fs.createWriteStream(dest);
       let timeoutHandle: NodeJS.Timeout | null = null;
 
-      const request = https.get(url, { timeout: DOWNLOAD_TIMEOUT_MS }, (response) => {
+      const request = https.get(url, { timeout: BLOCKLIST_DOWNLOAD_TIMEOUT_MS }, (response) => {
         // Handle redirects
         if (response.statusCode === 302 || response.statusCode === 301) {
           file.close();

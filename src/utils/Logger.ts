@@ -1,12 +1,12 @@
 import winston from 'winston';
 import { LogLevel } from '../types/config';
+import { LOG_BUFFER_MAX_SIZE } from '../constants';
 
 export class Logger {
   private logger: winston.Logger;
   private static instance: Logger;
   private static onLogCallback?: () => void;
   private static logBuffer: string[] = [];
-  private static readonly MAX_BUFFER_SIZE = 500; // Keep last 500 log entries
 
   private constructor(level: LogLevel = 'info', enableFile: boolean = false) {
     // Map our custom 'verbose' level to Winston's 'silly' level
@@ -86,7 +86,7 @@ export class Logger {
     Logger.logBuffer.push(logLine);
 
     // Keep buffer size limited
-    if (Logger.logBuffer.length > Logger.MAX_BUFFER_SIZE) {
+    if (Logger.logBuffer.length > LOG_BUFFER_MAX_SIZE) {
       Logger.logBuffer.shift();
     }
   }

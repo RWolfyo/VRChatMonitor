@@ -1,6 +1,7 @@
 import notifier from 'node-notifier';
 import { Logger } from '../utils/Logger';
 import { PathResolver } from '../utils/PathResolver';
+import { NOTIFICATION_MIN_INTERVAL_MS } from '../constants';
 
 interface NotificationOptions {
   title?: string;
@@ -15,7 +16,6 @@ export class NotificationService {
   private pathResolver: PathResolver;
   private snoreToastPath: string | null = null;
   private lastNotificationTime: number = 0;
-  private readonly MIN_NOTIFICATION_INTERVAL = 2000; // 2 seconds
 
   constructor() {
     this.logger = Logger.getInstance();
@@ -36,7 +36,7 @@ export class NotificationService {
   public async notify(options: NotificationOptions): Promise<void> {
     // Rate limiting to prevent notification spam
     const now = Date.now();
-    if (now - this.lastNotificationTime < this.MIN_NOTIFICATION_INTERVAL) {
+    if (now - this.lastNotificationTime < NOTIFICATION_MIN_INTERVAL_MS) {
       this.logger.debug('Notification rate limited');
       return;
     }

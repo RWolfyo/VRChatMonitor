@@ -272,7 +272,7 @@ export class CommandHandler {
     // Update app command
     this.registerCommand({
       name: 'update-app',
-      aliases: ['update', 'upgrade'],
+      aliases: ['upgrade'],
       description: 'Download and install the latest application update',
       handler: async () => {
         console.log();

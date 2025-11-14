@@ -1,6 +1,16 @@
 import * as net from 'net';
 import * as os from 'os';
 import { Logger } from '../utils/Logger';
+import {
+  XSOVERLAY_UDP_PORT,
+  XSOVERLAY_HOST,
+  VRCX_CONNECTION_TIMEOUT_MS,
+  XSOVERLAY_NOTIFICATION_TIMEOUT_MS,
+  XSOVERLAY_NOTIFICATION_HEIGHT,
+  XSOVERLAY_DEFAULT_OPACITY,
+  XSOVERLAY_ALERT_TIMEOUT_MS,
+  POWERSHELL_TIMEOUT_MS,
+} from '../constants';
 
 /**
  * VRCX IPC Packet Structure
@@ -44,8 +54,6 @@ export class VRCXService {
   private enabled: boolean;
   private xsOverlayEnabled: boolean;
   private pipeName: string;
-  private readonly xsOverlayPort = 42069;
-  private readonly xsOverlayHost = '127.0.0.1';
 
   constructor(enabled: boolean = false, xsOverlayEnabled: boolean = false) {
     this.logger = Logger.getInstance();
@@ -171,7 +179,7 @@ export class VRCXService {
           hint: 'Check VRCX -> Settings -> General -> Enable IPC',
         });
         resolve(false);
-      }, 2000); // Increased timeout to 2 seconds
+      }, VRCX_CONNECTION_TIMEOUT_MS);
 
       client.on('connect', () => {
         clearTimeout(timeout);
@@ -240,8 +248,8 @@ export class VRCXService {
   public async sendXSOverlayNotification(
     title: string,
     content: string,
-    timeout: number = 5000,
-    opacity: number = 1.0
+    timeout: number = XSOVERLAY_NOTIFICATION_TIMEOUT_MS,
+    opacity: number = XSOVERLAY_DEFAULT_OPACITY
   ): Promise<boolean> {
     if (!this.xsOverlayEnabled) {
       return false;
@@ -255,7 +263,7 @@ export class VRCXService {
         messageType: 1,
         title,
         content,
-        height: 110,
+        height: XSOVERLAY_NOTIFICATION_HEIGHT,
         sourceApp: 'VRChat Monitor',
         timeout,
         audioPath: '',
@@ -267,14 +275,14 @@ export class VRCXService {
       const buffer = Buffer.from(JSON.stringify(message), 'utf-8');
 
       this.logger.debug('Sending XSOverlay notification', {
-        host: this.xsOverlayHost,
-        port: this.xsOverlayPort,
+        host: XSOVERLAY_HOST,
+        port: XSOVERLAY_UDP_PORT,
         title,
         contentLength: content.length,
       });
 
       return new Promise((resolve) => {
-        socket.send(buffer, this.xsOverlayPort, this.xsOverlayHost, (error) => {
+        socket.send(buffer, XSOVERLAY_UDP_PORT, XSOVERLAY_HOST, (error) => {
           socket.close();
 
           if (error) {
@@ -319,8 +327,8 @@ export class VRCXService {
       success = await this.sendXSOverlayNotification(
         displayName,
         message,
-        5000,
-        1.0
+        XSOVERLAY_ALERT_TIMEOUT_MS,
+        XSOVERLAY_DEFAULT_OPACITY
       );
     }
 
@@ -335,7 +343,7 @@ export class VRCXService {
       const { execSync } = await import('child_process');
       // Use PowerShell to list pipes
       const cmd = 'powershell -Command "Get-ChildItem \\\\.\\pipe\\ | Select-Object -ExpandProperty Name | Where-Object { $_ -like \'vrcx-*\' }"';
-      const output = execSync(cmd, { encoding: 'utf-8', timeout: 3000 });
+      const output = execSync(cmd, { encoding: 'utf-8', timeout: POWERSHELL_TIMEOUT_MS });
       const pipes = output.trim().split('\n').map(p => p.trim()).filter(p => p.length > 0);
       return pipes;
     } catch (error) {

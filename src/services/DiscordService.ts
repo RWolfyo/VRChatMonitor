@@ -1,4 +1,16 @@
 import { Logger } from '../utils/Logger';
+import {
+  DISCORD_MAX_RETRIES,
+  DISCORD_RETRY_DELAY_MS,
+  DISCORD_RATE_LIMIT_DELAY_MS,
+  DISCORD_MAX_QUEUE_SIZE,
+  DISCORD_MATCHED_TEXT_MAX_LENGTH,
+  DISCORD_COLOR_HIGH_SEVERITY,
+  DISCORD_COLOR_MEDIUM_SEVERITY,
+  DISCORD_COLOR_LOW_SEVERITY,
+  DISCORD_COLOR_DEFAULT,
+  DISCORD_COLOR_UPDATE_AVAILABLE,
+} from '../constants';
 
 interface DiscordEmbed {
   title?: string;
@@ -18,11 +30,6 @@ interface QueuedMessage {
   timestamp: number;
   retries: number;
 }
-
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 2000;
-const RATE_LIMIT_DELAY_MS = 2000; // Discord webhook rate limit: 30 req/min = 2 sec per request
-const MAX_QUEUE_SIZE = 100;
 
 export class DiscordService {
   private logger: Logger;
@@ -118,8 +125,8 @@ export class DiscordService {
           }
           if (match.matchedText) {
             // Truncate long text for Discord
-            const displayText = match.matchedText.length > 200
-              ? match.matchedText.substring(0, 200) + '...'
+            const displayText = match.matchedText.length > DISCORD_MATCHED_TEXT_MAX_LENGTH
+              ? match.matchedText.substring(0, DISCORD_MATCHED_TEXT_MAX_LENGTH) + '...'
               : match.matchedText;
             fieldValue += `**Matched Text:** "${displayText}"\n`;
           }
@@ -153,7 +160,7 @@ export class DiscordService {
     const embed: DiscordEmbed = {
       title: '🔄 Update Available',
       description: `A new version of VRChat Monitor is available!`,
-      color: 0x5865f2, // Blurple
+      color: DISCORD_COLOR_UPDATE_AVAILABLE,
       fields: [
         { name: 'Current Version', value: currentVersion, inline: true },
         { name: 'Latest Version', value: remoteVersion, inline: true },
@@ -168,7 +175,7 @@ export class DiscordService {
    * Queue a message for sending
    */
   private async queueMessage(message: DiscordMessage): Promise<void> {
-    if (this.queue.length >= MAX_QUEUE_SIZE) {
+    if (this.queue.length >= DISCORD_MAX_QUEUE_SIZE) {
       this.logger.warn('Discord message queue is full, dropping oldest message');
       this.queue.shift();
     }
@@ -200,8 +207,8 @@ export class DiscordService {
 
       // Rate limiting - ensure minimum time between requests
       const timeSinceLastSent = Date.now() - this.lastSentTime;
-      if (timeSinceLastSent < RATE_LIMIT_DELAY_MS) {
-        const waitTime = RATE_LIMIT_DELAY_MS - timeSinceLastSent;
+      if (timeSinceLastSent < DISCORD_RATE_LIMIT_DELAY_MS) {
+        const waitTime = DISCORD_RATE_LIMIT_DELAY_MS - timeSinceLastSent;
         this.logger.debug(`Rate limiting: waiting ${waitTime}ms before next Discord message`);
         await this.sleep(waitTime);
       }
@@ -215,14 +222,14 @@ export class DiscordService {
         this.logger.error('Failed to send Discord message', { error });
 
         queued.retries++;
-        if (queued.retries >= MAX_RETRIES) {
+        if (queued.retries >= DISCORD_MAX_RETRIES) {
           this.logger.error('Discord message exceeded max retries, dropping', {
             retries: queued.retries,
           });
           this.queue.shift();
         } else {
-          this.logger.info(`Retrying Discord message (attempt ${queued.retries + 1}/${MAX_RETRIES})`);
-          await this.sleep(RETRY_DELAY_MS * queued.retries);
+          this.logger.info(`Retrying Discord message (attempt ${queued.retries + 1}/${DISCORD_MAX_RETRIES})`);
+          await this.sleep(DISCORD_RETRY_DELAY_MS * queued.retries);
         }
       }
     }
@@ -254,13 +261,13 @@ export class DiscordService {
   private getSeverityColor(severity: number): number {
     switch (severity) {
       case 3: // high
-        return 0xed4245; // Red
+        return DISCORD_COLOR_HIGH_SEVERITY;
       case 2: // medium
-        return 0xfee75c; // Yellow
+        return DISCORD_COLOR_MEDIUM_SEVERITY;
       case 1: // low
-        return 0x57f287; // Green
+        return DISCORD_COLOR_LOW_SEVERITY;
       default:
-        return 0x5865f2; // Blurple
+        return DISCORD_COLOR_DEFAULT;
     }
   }
 

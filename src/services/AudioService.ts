@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import fs from 'fs';
 import { Logger } from '../utils/Logger';
 import { PathResolver } from '../utils/PathResolver';
+import { AUDIO_PLAYBACK_TIMEOUT_MS } from '../constants';
 
 export class AudioService {
   private logger: Logger;
@@ -111,7 +112,7 @@ export class AudioService {
           child.kill();
           reject(new Error('Sound playback timeout'));
         }
-      }, 10000); // 10 second timeout
+      }, AUDIO_PLAYBACK_TIMEOUT_MS);
 
       child.on('exit', () => {
         clearTimeout(timeout);

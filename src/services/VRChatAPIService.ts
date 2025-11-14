@@ -6,6 +6,16 @@ import { PathResolver } from '../utils/PathResolver';
 import { LoginPrompt } from '../utils/LoginPrompt';
 import { KeyvBetterSqliteStore } from '../utils/KeyvBetterSqliteStore';
 import { APP_VERSION } from '../version';
+import {
+  API_CACHE_DURATION_MS,
+  API_CACHE_PRUNE_INTERVAL_MS,
+  API_RATE_LIMIT_CALLS,
+  API_RATE_LIMIT_WINDOW_MS,
+  API_CALL_SPACING_MS,
+  SESSION_REFRESH_THRESHOLD_MS,
+  SESSION_EXPIRY_MS,
+  SESSION_COOKIE_SAVE_DELAY_MS,
+} from '../constants';
 
 export interface VRChatCredentials {
   username: string;
@@ -24,8 +34,6 @@ export interface StoredSession {
   expiresAt?: number;
 }
 
-const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
-const SESSION_REFRESH_THRESHOLD = 6 * 60 * 60 * 1000; // 6 hours
 
 export class VRChatAPIService {
   private client: VRChat | null = null;
@@ -38,12 +46,10 @@ export class VRChatAPIService {
   private onCredentialsSaved?: (username: string, password: string) => void;
   private pruneTimer: NodeJS.Timeout | null = null;
 
-  // Rate limiting: 10 calls per 30 seconds
+  // Rate limiting: managed by constants
   private apiCallQueue: Array<{ fn: () => Promise<any>; resolve: (value: any) => void; reject: (error: any) => void }> = [];
   private isProcessingQueue: boolean = false;
   private callTimestamps: number[] = [];
-  private readonly RATE_LIMIT_CALLS = 10;
-  private readonly RATE_LIMIT_WINDOW_MS = 30000; // 30 seconds
 
   constructor(
     private credentials: VRChatCredentials | null = null,
@@ -74,7 +80,7 @@ export class VRChatAPIService {
       this.logger.error('Keyv connection error', { error: err });
     });
 
-    // Start automatic cache pruning every 5 minutes
+    // Start automatic cache pruning
     this.startCachePruning();
   }
 
@@ -84,7 +90,7 @@ export class VRChatAPIService {
   private startCachePruning(): void {
     this.pruneTimer = setInterval(() => {
       this.pruneCache();
-    }, 5 * 60 * 1000); // 5 minutes
+    }, API_CACHE_PRUNE_INTERVAL_MS);
   }
 
   /**
@@ -114,16 +120,16 @@ export class VRChatAPIService {
       // Clean up old timestamps outside the rate limit window
       const now = Date.now();
       this.callTimestamps = this.callTimestamps.filter(
-        timestamp => now - timestamp < this.RATE_LIMIT_WINDOW_MS
+        timestamp => now - timestamp < API_RATE_LIMIT_WINDOW_MS
       );
 
       // Check if we've hit the rate limit
-      if (this.callTimestamps.length >= this.RATE_LIMIT_CALLS) {
+      if (this.callTimestamps.length >= API_RATE_LIMIT_CALLS) {
         // Calculate how long to wait
         const oldestCall = this.callTimestamps[0];
-        const waitTime = this.RATE_LIMIT_WINDOW_MS - (now - oldestCall);
+        const waitTime = API_RATE_LIMIT_WINDOW_MS - (now - oldestCall);
 
-        this.logger.debug(`Rate limit reached (${this.callTimestamps.length}/${this.RATE_LIMIT_CALLS}), waiting ${waitTime}ms`);
+        this.logger.debug(`Rate limit reached (${this.callTimestamps.length}/${API_RATE_LIMIT_CALLS}), waiting ${waitTime}ms`);
 
         // Wait before processing next call
         await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -147,7 +153,7 @@ export class VRChatAPIService {
 
       // Small delay between calls to spread them out
       if (this.apiCallQueue.length > 0) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, API_CALL_SPACING_MS));
       }
     }
 
@@ -187,12 +193,12 @@ export class VRChatAPIService {
         return false;
       }
 
-      // Check if session needs refresh (6 hours before expiry)
+      // Check if session needs refresh
       if (storedSession.expiresAt && storedSession.timestamp) {
         const now = Date.now();
         const timeUntilExpiry = storedSession.expiresAt - now;
 
-        if (timeUntilExpiry < SESSION_REFRESH_THRESHOLD && timeUntilExpiry > 0) {
+        if (timeUntilExpiry < SESSION_REFRESH_THRESHOLD_MS && timeUntilExpiry > 0) {
           this.logger.info('Session expires soon, will refresh after test');
         }
       }
@@ -223,7 +229,7 @@ export class VRChatAPIService {
         // Refresh if needed
         if (storedSession.expiresAt) {
           const timeUntilExpiry = storedSession.expiresAt - Date.now();
-          if (timeUntilExpiry < SESSION_REFRESH_THRESHOLD && timeUntilExpiry > 0) {
+          if (timeUntilExpiry < SESSION_REFRESH_THRESHOLD_MS && timeUntilExpiry > 0) {
             await this.refreshSession();
           }
         }
@@ -282,10 +288,10 @@ export class VRChatAPIService {
     this.sessionTimestamp = Date.now();
 
     // Wait a bit for the VRChat client to store cookies in Keyv
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, SESSION_COOKIE_SAVE_DELAY_MS));
 
     // Store session metadata (Keyv already has the cookies from VRChat client)
-    const sessionExpiry = this.sessionTimestamp + (24 * 60 * 60 * 1000);
+    const sessionExpiry = this.sessionTimestamp + SESSION_EXPIRY_MS;
     await this.keyv.set('session', {
       cookies: true, // Marker that we have a session
       timestamp: this.sessionTimestamp,
@@ -318,7 +324,7 @@ export class VRChatAPIService {
 
       // Update session timestamp
       const newTimestamp = Date.now();
-      const newExpiry = newTimestamp + (24 * 60 * 60 * 1000);
+      const newExpiry = newTimestamp + SESSION_EXPIRY_MS;
 
       await this.keyv.set('session', {
         cookies: await this.keyv.get('cookies'),
@@ -482,7 +488,7 @@ export class VRChatAPIService {
   /**
    * Set cache with expiration
    */
-  private setCache<T>(key: string, data: T, ttl: number = CACHE_DURATION_MS): void {
+  private setCache<T>(key: string, data: T, ttl: number = API_CACHE_DURATION_MS): void {
     this.cache.set(key, {
       data,
       timestamp: Date.now(),

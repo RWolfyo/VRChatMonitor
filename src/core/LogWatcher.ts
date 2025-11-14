@@ -5,6 +5,12 @@ import { EventEmitter } from 'events';
 import { Logger } from '../utils/Logger';
 import { PathResolver } from '../utils/PathResolver';
 import { PlayerJoinEvent, PlayerLeaveEvent } from '../types/events';
+import {
+  LOG_ROTATION_CHECK_INTERVAL_MS,
+  LOG_ROTATION_CHECK_INTERVAL_SECONDS,
+  LOG_WATCHER_STABILITY_THRESHOLD_MS,
+  LOG_WATCHER_POLL_INTERVAL_MS,
+} from '../constants';
 
 export class LogWatcher extends EventEmitter {
   private watcher: FSWatcher | null = null;
@@ -14,6 +20,7 @@ export class LogWatcher extends EventEmitter {
   private currentLogFile: string | null = null;
   private lastPosition: number = 0;
   private isWatching: boolean = false;
+  private rotationCheckTimer: NodeJS.Timeout | null = null;
 
   // Regex patterns for log parsing
   private readonly JOIN_PATTERN = /\[Behaviour\] OnPlayerJoined (.+) \(([^)]+)\)/;
@@ -55,14 +62,17 @@ export class LogWatcher extends EventEmitter {
         persistent: true,
         ignoreInitial: false,
         awaitWriteFinish: {
-          stabilityThreshold: 500,
-          pollInterval: 100,
+          stabilityThreshold: LOG_WATCHER_STABILITY_THRESHOLD_MS,
+          pollInterval: LOG_WATCHER_POLL_INTERVAL_MS,
         },
       });
 
       this.watcher.on('add', (filePath) => this.handleFileAdd(filePath));
       this.watcher.on('change', (filePath) => this.handleFileChange(filePath));
       this.watcher.on('error', (error) => this.handleError(error instanceof Error ? error : new Error(String(error))));
+
+      // Start periodic rotation check
+      this.startRotationCheck();
 
       this.isWatching = true;
       this.logger.info('LogWatcher started successfully');
@@ -80,6 +90,13 @@ export class LogWatcher extends EventEmitter {
       await this.watcher.close();
       this.watcher = null;
     }
+
+    // Stop rotation check timer
+    if (this.rotationCheckTimer) {
+      clearInterval(this.rotationCheckTimer);
+      this.rotationCheckTimer = null;
+    }
+
     this.isWatching = false;
     this.logger.info('LogWatcher stopped');
   }
@@ -128,6 +145,47 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
+   * Start periodic rotation check timer
+   */
+  private startRotationCheck(): void {
+    this.rotationCheckTimer = setInterval(() => {
+      this.checkForLogRotation();
+    }, LOG_ROTATION_CHECK_INTERVAL_MS);
+
+    this.logger.debug(`Log rotation check timer started (checking every ${LOG_ROTATION_CHECK_INTERVAL_SECONDS} seconds)`);
+  }
+
+  /**
+   * Periodically check if a newer log file exists
+   */
+  private checkForLogRotation(): void {
+    try {
+      const latestFile = this.findLatestLogFile();
+
+      // If we found a newer file, switch to it
+      if (latestFile && latestFile !== this.currentLogFile) {
+        if (!this.currentLogFile || this.isNewerFile(latestFile, this.currentLogFile)) {
+          this.logger.info(`Log rotation detected! Switching to: ${latestFile}`);
+          this.currentLogFile = latestFile;
+          this.lastPosition = 0;
+        }
+      }
+
+      // Also check if current file still exists
+      if (this.currentLogFile && !fs.existsSync(this.currentLogFile)) {
+        this.logger.warn(`Current log file no longer exists: ${this.currentLogFile}`);
+        this.currentLogFile = latestFile;
+        this.lastPosition = 0;
+        if (this.currentLogFile) {
+          this.logger.info(`Switched to: ${this.currentLogFile}`);
+        }
+      }
+    } catch (error) {
+      this.logger.debug('Error during rotation check', { error });
+    }
+  }
+
+  /**
    * Handle file change (new content written)
    */
   private handleFileChange(filePath: string): void {
@@ -146,6 +204,13 @@ export class LogWatcher extends EventEmitter {
    */
   private processNewContent(filePath: string): void {
     try {
+      // Check if file still exists before processing
+      if (!fs.existsSync(filePath)) {
+        this.logger.warn(`Log file disappeared: ${filePath}`);
+        this.checkForLogRotation(); // Immediately check for rotation
+        return;
+      }
+
       const currentSize = this.getFileSize(filePath);
 
       // File was truncated or reset
@@ -172,6 +237,8 @@ export class LogWatcher extends EventEmitter {
       }
     } catch (error) {
       this.logger.error('Error processing new log content', { error, filePath });
+      // On error, trigger rotation check in case file was rotated
+      this.checkForLogRotation();
     }
   }
 
