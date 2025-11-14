@@ -530,12 +530,36 @@ REM Backup current executable
 if exist "${currentExePath}.bak" del /F /Q "${currentExePath}.bak" 2>NUL
 move /Y "${currentExePath}" "${currentExePath}.bak" 2>NUL
 
-REM Copy new executable and all files from extracted directory
+REM Backup vendor and lib folders if they exist (in case update fails)
+if exist "${execDir}\\vendor" (
+    if exist "${execDir}\\vendor.bak" rmdir /S /Q "${execDir}\\vendor.bak" 2>NUL
+    move /Y "${execDir}\\vendor" "${execDir}\\vendor.bak" 2>NUL
+)
+if exist "${execDir}\\lib" (
+    if exist "${execDir}\\lib.bak" rmdir /S /Q "${execDir}\\lib.bak" 2>NUL
+    move /Y "${execDir}\\lib" "${execDir}\\lib.bak" 2>NUL
+)
+
+REM Copy only executable, lib, and vendor folders (preserve user configs)
 echo Copying new files...
-xcopy /E /I /Y "${path.dirname(newExePath)}\\*" "${execDir}\\" 2>NUL
+xcopy /Y "${path.dirname(newExePath)}\\${exeName}" "${execDir}\\" 2>NUL
+xcopy /E /I /Y "${path.dirname(newExePath)}\\lib" "${execDir}\\lib" 2>NUL
+xcopy /E /I /Y "${path.dirname(newExePath)}\\vendor" "${execDir}\\vendor" 2>NUL
+
+REM Verify critical folders were copied
+if not exist "${execDir}\\vendor" (
+    echo Warning: vendor folder not found in update
+)
+if not exist "${execDir}\\lib" (
+    echo Warning: lib folder not found in update
+)
+
+REM Cleanup - delete backup folders after successful copy
+timeout /t 1 /nobreak > nul
+if exist "${execDir}\\vendor.bak" rmdir /S /Q "${execDir}\\vendor.bak" 2>NUL
+if exist "${execDir}\\lib.bak" rmdir /S /Q "${execDir}\\lib.bak" 2>NUL
 
 REM Cleanup - delete any leftover update.zip files
-timeout /t 1 /nobreak > nul
 if exist "${execDir}\\update.zip" del /F /Q "${execDir}\\update.zip" 2>NUL
 if exist "${tempDir}\\update.zip" del /F /Q "${tempDir}\\update.zip" 2>NUL
 
