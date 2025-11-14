@@ -117,21 +117,35 @@ export class BlocklistManager extends EventEmitter {
         const regex = new RegExp(row.pattern, 'i');
 
         // Test regex for ReDoS vulnerability by timing execution
-        // Test against a long string to detect catastrophic backtracking
-        const testString = 'x'.repeat(REDOS_TEST_STRING_LENGTH);
-        const start = Date.now();
+        // Test against multiple patterns to catch catastrophic backtracking
+        const testStrings = [
+          'x'.repeat(REDOS_TEST_STRING_LENGTH), // Simple repeated character
+          'ab'.repeat(REDOS_TEST_STRING_LENGTH / 2), // Alternating pattern
+          'a'.repeat(REDOS_TEST_STRING_LENGTH / 2) + 'b'.repeat(REDOS_TEST_STRING_LENGTH / 2), // Two blocks
+        ];
 
-        try {
-          regex.test(testString);
-        } catch (testError) {
-          this.logger.warn(`Regex pattern execution error: ${row.pattern}`, { error: testError });
-          continue;
+        let maxDuration = 0;
+        for (const testString of testStrings) {
+          const start = Date.now();
+
+          try {
+            regex.test(testString);
+          } catch (testError) {
+            this.logger.warn(`Regex pattern execution error: ${row.pattern}`, { error: testError });
+            continue;
+          }
+
+          const duration = Date.now() - start;
+          maxDuration = Math.max(maxDuration, duration);
+
+          // Early exit if we detect slowness
+          if (duration > REDOS_MAX_EXECUTION_TIME_MS) {
+            break;
+          }
         }
 
-        const duration = Date.now() - start;
-
-        if (duration > REDOS_MAX_EXECUTION_TIME_MS) {
-          this.logger.warn(`Regex pattern too slow (${duration}ms), potential ReDoS - skipping: ${row.pattern}`);
+        if (maxDuration > REDOS_MAX_EXECUTION_TIME_MS) {
+          this.logger.warn(`Regex pattern too slow (${maxDuration}ms), potential ReDoS - skipping: ${row.pattern}`);
           continue;
         }
 
@@ -169,12 +183,28 @@ export class BlocklistManager extends EventEmitter {
         tempDb = new this.Database(tempPath, { readonly: true });
         // Check if metadata table exists to validate database structure
         tempDb.prepare('SELECT value FROM metadata WHERE key = ?').get('lastUpdated');
-        tempDb.close();
       } catch (error) {
+        // Ensure database is closed before cleanup
+        if (tempDb) {
+          try {
+            tempDb.close();
+          } catch {
+            // Ignore close errors
+          }
+        }
         if (fs.existsSync(tempPath)) {
           fs.unlinkSync(tempPath);
         }
         throw new Error('Downloaded file is not a valid SQLite database');
+      } finally {
+        // Always close the database
+        if (tempDb) {
+          try {
+            tempDb.close();
+          } catch {
+            // Ignore close errors
+          }
+        }
       }
 
       // Check if different from current

@@ -134,6 +134,7 @@ ${centerLine('')}
 
 async function main() {
   let monitor: VRChatMonitor | null = null;
+  let commandHandler: CommandHandler | null = null as CommandHandler | null;
 
   try {
     // Set console window title and configure console mode (Windows only)
@@ -163,7 +164,7 @@ async function main() {
       console.log();
 
       // Start interactive command handler
-      const commandHandler = new CommandHandler(monitor!);
+      commandHandler = new CommandHandler(monitor!);
       commandHandler.start();
     });
 
@@ -296,6 +297,14 @@ async function main() {
     console.error();
 
     // Cleanup
+    if (commandHandler) {
+      try {
+        commandHandler.stop();
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
+    }
+
     if (monitor) {
       try {
         await monitor.stop();

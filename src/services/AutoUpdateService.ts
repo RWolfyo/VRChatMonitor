@@ -50,10 +50,14 @@ export class AutoUpdateService {
 
     // Check in background, don't block startup
     setTimeout(async () => {
-      await this.checkForUpdates(false);
+      try {
+        await this.checkForUpdates(false);
 
-      // Start periodic checks after initial check
-      this.startPeriodicChecks();
+        // Start periodic checks after initial check
+        this.startPeriodicChecks();
+      } catch (error) {
+        this.logger.error('Error during startup update check', { error });
+      }
     }, UPDATE_STARTUP_CHECK_DELAY_MS);
   }
 
@@ -72,7 +76,11 @@ export class AutoUpdateService {
 
     // Check for updates periodically
     this.updateCheckTimer = setInterval(async () => {
-      await this.checkForUpdates(true); // Silent checks
+      try {
+        await this.checkForUpdates(true); // Silent checks
+      } catch (error) {
+        this.logger.debug('Error during periodic update check', { error });
+      }
     }, UPDATE_CHECK_INTERVAL_MS);
 
     this.logger.debug(`Periodic update checks enabled (every ${UPDATE_CHECK_INTERVAL_MS / 1000 / 60} minutes)`);

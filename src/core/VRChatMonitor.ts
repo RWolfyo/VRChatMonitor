@@ -12,7 +12,7 @@ import { LogWatcher } from './LogWatcher';
 import { BlocklistManager } from './BlocklistManager';
 import { PlayerJoinEvent } from '../types/events';
 import { MatchResult } from '../types/blocklist';
-import { DEDUPE_CLEANUP_MULTIPLIER, SECONDS_TO_MS } from '../constants';
+import { DEDUPE_CLEANUP_MULTIPLIER, DEDUPE_MAP_MAX_SIZE, SECONDS_TO_MS } from '../constants';
 
 export class VRChatMonitor extends EventEmitter {
   private logger: Logger;
@@ -383,10 +383,33 @@ export class VRChatMonitor extends EventEmitter {
     const now = Date.now();
     const cutoff = now - this.DEDUPE_WINDOW_MS * DEDUPE_CLEANUP_MULTIPLIER;
 
+    let deletedCount = 0;
     for (const [userId, timestamp] of this.recentJoins.entries()) {
       if (timestamp < cutoff) {
         this.recentJoins.delete(userId);
+        deletedCount++;
       }
+    }
+
+    // Emergency cleanup if map grows too large despite time-based cleanup
+    if (this.recentJoins.size > DEDUPE_MAP_MAX_SIZE) {
+      this.logger.warn(`Dedupe map exceeded maximum size (${DEDUPE_MAP_MAX_SIZE}), forcing cleanup`, {
+        currentSize: this.recentJoins.size
+      });
+
+      // Sort by timestamp and keep only the most recent entries
+      const entries = Array.from(this.recentJoins.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, DEDUPE_MAP_MAX_SIZE);
+
+      this.recentJoins.clear();
+      for (const [userId, timestamp] of entries) {
+        this.recentJoins.set(userId, timestamp);
+      }
+    }
+
+    if (deletedCount > 0) {
+      this.logger.debug(`Cleaned up ${deletedCount} old join records (${this.recentJoins.size} remaining)`);
     }
   }
 

@@ -321,13 +321,20 @@ export class LogWatcher extends EventEmitter {
    * Read chunk of file
    */
   private readFileChunk(filePath: string, start: number, end: number): string {
-    const buffer = Buffer.alloc(end - start);
-    const fd = fs.openSync(filePath, 'r');
+    let fd: number | null = null;
     try {
+      const buffer = Buffer.alloc(end - start);
+      fd = fs.openSync(filePath, 'r');
       fs.readSync(fd, buffer, 0, buffer.length, start);
       return buffer.toString('utf8');
     } finally {
-      fs.closeSync(fd);
+      if (fd !== null) {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          // Ignore close errors
+        }
+      }
     }
   }
 

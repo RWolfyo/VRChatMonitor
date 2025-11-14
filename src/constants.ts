@@ -107,6 +107,7 @@ export const CRASH_REPORT_SEPARATOR_WIDTH = 70;
 // Monitoring
 // ============================================================================
 export const DEDUPE_CLEANUP_MULTIPLIER = 2;
+export const DEDUPE_MAP_MAX_SIZE = 10000; // Maximum number of join records to keep
 
 // ============================================================================
 // General Utility
