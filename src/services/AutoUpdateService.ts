@@ -347,7 +347,34 @@ ${centerLine('')}
   }
 
   /**
-   * Download file from URL
+   * Format bytes to human-readable string
+   */
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+  }
+
+  /**
+   * Render progress bar
+   */
+  private renderProgressBar(current: number, total: number, width: number = 40): string {
+    const percentage = total > 0 ? (current / total) * 100 : 0;
+    const filled = Math.round((width * current) / total);
+    const empty = width - filled;
+
+    const bar = '█'.repeat(filled) + '░'.repeat(empty);
+    const percent = percentage.toFixed(1).padStart(5, ' ');
+    const downloaded = this.formatBytes(current).padStart(10, ' ');
+    const totalSize = this.formatBytes(total).padStart(10, ' ');
+
+    return `[${bar}] ${percent}% | ${downloaded} / ${totalSize}`;
+  }
+
+  /**
+   * Download file from URL with progress bar
    */
   private async downloadFile(url: string, dest: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -374,9 +401,38 @@ ${centerLine('')}
           return reject(new Error(`Download failed with status ${response.statusCode}`));
         }
 
+        // Get total size from headers
+        const totalSize = parseInt(response.headers['content-length'] || '0', 10);
+        let downloadedSize = 0;
+        let lastUpdate = Date.now();
+
+        // Show initial progress
+        process.stdout.write('\n');
+        process.stdout.write(this.renderProgressBar(0, totalSize));
+
+        // Track download progress
+        response.on('data', (chunk: Buffer) => {
+          downloadedSize += chunk.length;
+
+          // Update progress bar every 100ms to avoid flickering
+          const now = Date.now();
+          if (now - lastUpdate > 100 || downloadedSize === totalSize) {
+            process.stdout.clearLine(0);
+            process.stdout.cursorTo(0);
+            process.stdout.write(this.renderProgressBar(downloadedSize, totalSize));
+            lastUpdate = now;
+          }
+        });
+
         response.pipe(file);
 
         file.on('finish', () => {
+          // Ensure we show 100% at the end
+          process.stdout.clearLine(0);
+          process.stdout.cursorTo(0);
+          process.stdout.write(this.renderProgressBar(totalSize, totalSize));
+          process.stdout.write('\n\n');
+
           file.close();
           resolve();
         });
