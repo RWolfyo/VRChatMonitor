@@ -255,6 +255,42 @@ export class CommandHandler {
       },
     });
 
+    // Check for updates command
+    this.registerCommand({
+      name: 'check-update',
+      aliases: ['check-updates'],
+      description: 'Check for application updates',
+      handler: async () => {
+        console.log();
+        console.log(chalk.cyan('🔍 Checking for updates...'));
+        console.log();
+        await this.monitor.checkForUpdates();
+        console.log();
+      },
+    });
+
+    // Update app command
+    this.registerCommand({
+      name: 'update-app',
+      aliases: ['update', 'upgrade'],
+      description: 'Download and install the latest application update',
+      handler: async () => {
+        console.log();
+        console.log(chalk.cyan.bold('🚀 Starting update process...'));
+        console.log(chalk.gray('═'.repeat(61)));
+        console.log();
+
+        const success = await this.monitor.performUpdate();
+
+        if (!success) {
+          console.log();
+          console.log(chalk.yellow('⚠ Update failed or cancelled'));
+          console.log();
+        }
+        // If successful, the app will restart automatically
+      },
+    });
+
     // Quit command
     this.registerCommand({
       name: 'quit',

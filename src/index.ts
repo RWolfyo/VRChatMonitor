@@ -91,7 +91,7 @@ function writeCrashLog(error: Error | any, type: string = 'crash'): string {
 /**
  * Create a centered line within the box (59 chars wide)
  */
-function centerLine(text: string, width: number = 59): string {
+export function centerLine(text: string, width: number = 59): string {
   const padding = width - text.length;
   const leftPad = Math.floor(padding / 2);
   const rightPad = padding - leftPad;
@@ -101,7 +101,7 @@ function centerLine(text: string, width: number = 59): string {
 /**
  * Create a left-aligned line within the box (59 chars wide)
  */
-function leftLine(text: string, width: number = 59): string {
+export function leftLine(text: string, width: number = 59): string {
   const padding = width - text.length;
   return '║' + text + ' '.repeat(padding) + '║';
 }

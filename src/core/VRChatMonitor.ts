@@ -7,6 +7,7 @@ import { DiscordService } from '../services/DiscordService';
 import { NotificationService } from '../services/NotificationService';
 import { AudioService } from '../services/AudioService';
 import { VRCXService } from '../services/VRCXService';
+import { AutoUpdateService } from '../services/AutoUpdateService';
 import { LogWatcher } from './LogWatcher';
 import { BlocklistManager } from './BlocklistManager';
 import { PlayerJoinEvent } from '../types/events';
@@ -21,6 +22,7 @@ export class VRChatMonitor extends EventEmitter {
   private notificationService: NotificationService;
   private audioService: AudioService;
   private vrcxService: VRCXService | null = null;
+  private autoUpdateService: AutoUpdateService;
   private logWatcher: LogWatcher | null = null;
   private blocklistManager: BlocklistManager | null = null;
 
@@ -55,6 +57,7 @@ export class VRChatMonitor extends EventEmitter {
       this.config.notifications.vrcx.enabled,
       this.config.notifications.vrcx.xsOverlay
     );
+    this.autoUpdateService = new AutoUpdateService();
 
     // Set dedupe window
     this.DEDUPE_WINDOW_MS = this.config.advanced.deduplicateWindow * 1000;
@@ -99,6 +102,9 @@ export class VRChatMonitor extends EventEmitter {
       this.logger.info('✅ VRChat Monitor started successfully');
       this.logger.info('🔍 Monitoring your instance for potential matches...');
 
+      // Check for updates in background
+      this.autoUpdateService.checkOnStartup();
+
       // Emit ready event
       this.emit('ready');
 
@@ -128,6 +134,11 @@ export class VRChatMonitor extends EventEmitter {
       // Stop blocklist updates
       if (this.blocklistManager) {
         this.blocklistManager.destroy();
+      }
+
+      // Stop auto-update checks
+      if (this.autoUpdateService) {
+        this.autoUpdateService.stop();
       }
 
       // Disconnect VRChat API
@@ -464,6 +475,20 @@ export class VRChatMonitor extends EventEmitter {
       this.logger.error(`Error manually checking user ${userId}`, { error });
       return null;
     }
+  }
+
+  /**
+   * Check for updates
+   */
+  public async checkForUpdates(): Promise<boolean> {
+    return await this.autoUpdateService.checkForUpdates(false);
+  }
+
+  /**
+   * Perform update
+   */
+  public async performUpdate(): Promise<boolean> {
+    return await this.autoUpdateService.performUpdate();
   }
 
   /**
