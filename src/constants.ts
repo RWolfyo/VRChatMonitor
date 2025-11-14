@@ -101,8 +101,15 @@ export const KEYV_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 export const BANNER_CONTENT_WIDTH = 59;
 export const CONSOLE_SEPARATOR_WIDTH = 61;
 export const CONSOLE_MATCHED_TEXT_MAX_LENGTH = 100;
+export const CRASH_REPORT_SEPARATOR_WIDTH = 70;
 
 // ============================================================================
 // Monitoring
 // ============================================================================
 export const DEDUPE_CLEANUP_MULTIPLIER = 2;
+
+// ============================================================================
+// General Utility
+// ============================================================================
+export const SECONDS_TO_MS = 1000;
+export const MINUTES_TO_MS = 60 * 1000;

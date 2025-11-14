@@ -4,6 +4,13 @@ import { VRChatMonitor } from './core/VRChatMonitor';
 import { Logger } from './utils/Logger';
 import { CommandHandler } from './utils/CommandHandler';
 import { APP_VERSION } from './version';
+import {
+  CRASH_REPORT_SEPARATOR_WIDTH,
+  CONSOLE_SEPARATOR_WIDTH,
+  CONSOLE_MATCHED_TEXT_MAX_LENGTH,
+  BANNER_CONTENT_WIDTH,
+  LOG_BUFFER_MAX_SIZE,
+} from './constants';
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -14,6 +21,7 @@ import * as path from 'path';
 function writeCrashLog(error: Error | any, type: string = 'crash'): string {
   try {
     // Get executable directory or current directory
+    // @ts-expect-error - process.pkg is added by pkg bundler
     const execDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
     const crashDir = path.join(execDir, 'crashes');
 
@@ -33,18 +41,18 @@ function writeCrashLog(error: Error | any, type: string = 'crash'): string {
 
     // Build crash report
     const report = [
-      '═'.repeat(70),
+      '═'.repeat(CRASH_REPORT_SEPARATOR_WIDTH),
       `VRChat Monitor v${APP_VERSION} - Crash Report`,
-      '═'.repeat(70),
+      '═'.repeat(CRASH_REPORT_SEPARATOR_WIDTH),
       '',
       `Type: ${type}`,
       `Date: ${now.toISOString()}`,
       `Platform: ${process.platform} ${process.arch}`,
       `Node Version: ${process.version}`,
       '',
-      '═'.repeat(70),
-      'Application Log (Last 500 entries):',
-      '═'.repeat(70),
+      '═'.repeat(CRASH_REPORT_SEPARATOR_WIDTH),
+      `Application Log (Last ${LOG_BUFFER_MAX_SIZE} entries):`,
+      '═'.repeat(CRASH_REPORT_SEPARATOR_WIDTH),
       '',
     ];
 
@@ -56,9 +64,9 @@ function writeCrashLog(error: Error | any, type: string = 'crash'): string {
     }
 
     report.push('');
-    report.push('═'.repeat(70));
+    report.push('═'.repeat(CRASH_REPORT_SEPARATOR_WIDTH));
     report.push('Error Details:');
-    report.push('═'.repeat(70));
+    report.push('═'.repeat(CRASH_REPORT_SEPARATOR_WIDTH));
     report.push('');
 
     if (error instanceof Error) {
@@ -73,9 +81,9 @@ function writeCrashLog(error: Error | any, type: string = 'crash'): string {
     }
 
     report.push('');
-    report.push('═'.repeat(70));
+    report.push('═'.repeat(CRASH_REPORT_SEPARATOR_WIDTH));
     report.push('End of Crash Report');
-    report.push('═'.repeat(70));
+    report.push('═'.repeat(CRASH_REPORT_SEPARATOR_WIDTH));
 
     // Write to file
     fs.writeFileSync(filepath, report.join('\n'), 'utf-8');
@@ -91,7 +99,7 @@ function writeCrashLog(error: Error | any, type: string = 'crash'): string {
 /**
  * Create a centered line within the box (59 chars wide)
  */
-export function centerLine(text: string, width: number = 59): string {
+export function centerLine(text: string, width: number = BANNER_CONTENT_WIDTH): string {
   const padding = width - text.length;
   const leftPad = Math.floor(padding / 2);
   const rightPad = padding - leftPad;
@@ -101,7 +109,7 @@ export function centerLine(text: string, width: number = 59): string {
 /**
  * Create a left-aligned line within the box (59 chars wide)
  */
-export function leftLine(text: string, width: number = 59): string {
+export function leftLine(text: string, width: number = BANNER_CONTENT_WIDTH): string {
   const padding = width - text.length;
   return '║' + text + ' '.repeat(padding) + '║';
 }
@@ -141,7 +149,7 @@ async function main() {
 
     // Print banner
     console.log(chalk.cyan(BANNER));
-    console.log(chalk.gray('═'.repeat(61)));
+    console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
     console.log();
 
     // Initialize monitor
@@ -151,7 +159,7 @@ async function main() {
     monitor.on('ready', async () => {
       const logger = Logger.getInstance();
       logger.info(chalk.green('✓ All systems operational'));
-      logger.info(chalk.gray('═'.repeat(61)));
+      logger.info(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
       console.log();
 
       // Start interactive command handler
@@ -161,9 +169,9 @@ async function main() {
 
     monitor.on('alert', (result) => {
       console.log();
-      console.log(chalk.red.bold('═'.repeat(61)));
+      console.log(chalk.red.bold('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
       console.log(chalk.red.bold('⚠️  MATCH DETECTED'));
-      console.log(chalk.red.bold('═'.repeat(61)));
+      console.log(chalk.red.bold('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
       console.log(chalk.white(`User: ${chalk.bold(result.displayName)}`));
       console.log(chalk.gray(`User ID: ${result.userId}`));
       console.log();
@@ -193,8 +201,8 @@ async function main() {
           }
           if (match.matchedText) {
             // Truncate very long text
-            const displayText = match.matchedText.length > 100
-              ? match.matchedText.substring(0, 100) + '...'
+            const displayText = match.matchedText.length > CONSOLE_MATCHED_TEXT_MAX_LENGTH
+              ? match.matchedText.substring(0, CONSOLE_MATCHED_TEXT_MAX_LENGTH) + '...'
               : match.matchedText;
             console.log(chalk.gray(`     Matched Text: "${displayText}"`));
           }
@@ -213,7 +221,7 @@ async function main() {
         console.log();
       }
 
-      console.log(chalk.red.bold('═'.repeat(61)));
+      console.log(chalk.red.bold('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
       console.log();
     });
 
@@ -227,9 +235,9 @@ async function main() {
 
   } catch (error) {
     console.error();
-    console.error(chalk.red.bold('═'.repeat(61)));
+    console.error(chalk.red.bold('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
     console.error(chalk.red.bold('❌ FATAL ERROR'));
-    console.error(chalk.red.bold('═'.repeat(61)));
+    console.error(chalk.red.bold('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
     console.error();
 
     // Write crash log
@@ -277,7 +285,7 @@ async function main() {
     }
 
     console.error();
-    console.error(chalk.red.bold('═'.repeat(61)));
+    console.error(chalk.red.bold('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
 
     // Show crash log location
     if (crashLogPath) {

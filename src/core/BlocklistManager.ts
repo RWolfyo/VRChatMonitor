@@ -19,6 +19,7 @@ import {
   DATABASE_REOPEN_DELAY_MS,
   HTTP_MAX_REDIRECTS,
   BLOCKLIST_DOWNLOAD_TIMEOUT_MS,
+  MINUTES_TO_MS,
 } from '../constants';
 
 export class BlocklistManager extends EventEmitter {
@@ -395,7 +396,7 @@ export class BlocklistManager extends EventEmitter {
    * Start periodic updates
    */
   private startPeriodicUpdates(): void {
-    const intervalMs = this.updateInterval * 60 * 1000;
+    const intervalMs = this.updateInterval * MINUTES_TO_MS;
     this.updateTimer = setInterval(() => {
       this.updateFromRemote();
     }, intervalMs);

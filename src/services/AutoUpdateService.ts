@@ -5,6 +5,13 @@ import { spawn } from 'child_process';
 import { Logger } from '../utils/Logger';
 import { APP_VERSION } from '../version';
 import { centerLine, leftLine } from '../index';
+import {
+  UPDATE_CHECK_INTERVAL_MS,
+  UPDATE_STARTUP_CHECK_DELAY_MS,
+  GITHUB_API_TIMEOUT_MS,
+  UPDATE_SCRIPT_DELAY_MS,
+  UPDATE_DOWNLOAD_TIMEOUT_MS,
+} from '../constants';
 
 interface GitHubRelease {
   tag_name: string;
@@ -18,7 +25,6 @@ interface GitHubRelease {
 export class AutoUpdateService {
   private logger: Logger;
   private readonly GITHUB_REPO = 'RWolfyo/VRChatMonitor';
-  private readonly CHECK_INTERVAL_MS = 60 * 60 * 1000; // Check every hour
   private updateCheckTimer: NodeJS.Timeout | null = null;
   private isUpdating: boolean = false;
 
@@ -45,7 +51,31 @@ export class AutoUpdateService {
     // Check in background, don't block startup
     setTimeout(async () => {
       await this.checkForUpdates(false);
-    }, 5000); // Wait 5 seconds after startup
+
+      // Start periodic checks after initial check
+      this.startPeriodicChecks();
+    }, UPDATE_STARTUP_CHECK_DELAY_MS);
+  }
+
+  /**
+   * Start periodic update checks
+   */
+  public startPeriodicChecks(): void {
+    if (!this.isPackaged()) {
+      return;
+    }
+
+    // Clear any existing timer
+    if (this.updateCheckTimer) {
+      clearInterval(this.updateCheckTimer);
+    }
+
+    // Check for updates periodically
+    this.updateCheckTimer = setInterval(async () => {
+      await this.checkForUpdates(true); // Silent checks
+    }, UPDATE_CHECK_INTERVAL_MS);
+
+    this.logger.debug(`Periodic update checks enabled (every ${UPDATE_CHECK_INTERVAL_MS / 1000 / 60} minutes)`);
   }
 
   /**
@@ -55,6 +85,7 @@ export class AutoUpdateService {
     if (this.updateCheckTimer) {
       clearInterval(this.updateCheckTimer);
       this.updateCheckTimer = null;
+      this.logger.debug('Periodic update checks stopped');
     }
   }
 
@@ -147,7 +178,7 @@ ${centerLine('')}
           'User-Agent': `VRChat-Monitor/${APP_VERSION}`,
           'Accept': 'application/vnd.github.v3+json',
         },
-        timeout: 10000,
+        timeout: GITHUB_API_TIMEOUT_MS,
       };
 
       const req = https.request(options, (res) => {
@@ -243,7 +274,7 @@ ${centerLine('')}
       );
 
       if (!zipAsset) {
-        this.logger.error('Release assets:', release.assets.map(a => a.name));
+        this.logger.error('Release assets:', { assets: release.assets.map(a => a.name) });
         throw new Error('No RELEASE ZIP file found in release assets. Make sure the release was built correctly.');
       }
 
@@ -286,7 +317,7 @@ ${centerLine('')}
       this.logger.info('');
 
       // Wait a moment for logs to flush
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, UPDATE_SCRIPT_DELAY_MS));
 
       // Execute update script and exit
       this.executeUpdateScript(execDir);
@@ -310,7 +341,7 @@ ${centerLine('')}
 
       https.get(url, {
         headers: { 'User-Agent': `VRChat-Monitor/${APP_VERSION}` },
-        timeout: 120000 // 2 minutes timeout
+        timeout: UPDATE_DOWNLOAD_TIMEOUT_MS
       }, (response) => {
         // Handle redirects
         if (response.statusCode === 302 || response.statusCode === 301) {

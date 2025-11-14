@@ -12,6 +12,7 @@ import { LogWatcher } from './LogWatcher';
 import { BlocklistManager } from './BlocklistManager';
 import { PlayerJoinEvent } from '../types/events';
 import { MatchResult } from '../types/blocklist';
+import { DEDUPE_CLEANUP_MULTIPLIER, SECONDS_TO_MS } from '../constants';
 
 export class VRChatMonitor extends EventEmitter {
   private logger: Logger;
@@ -60,7 +61,7 @@ export class VRChatMonitor extends EventEmitter {
     this.autoUpdateService = new AutoUpdateService();
 
     // Set dedupe window
-    this.DEDUPE_WINDOW_MS = this.config.advanced.deduplicateWindow * 1000;
+    this.DEDUPE_WINDOW_MS = this.config.advanced.deduplicateWindow * SECONDS_TO_MS;
 
     // Setup signal handlers
     this.setupSignalHandlers();
@@ -380,7 +381,7 @@ export class VRChatMonitor extends EventEmitter {
    */
   private cleanupOldJoins(): void {
     const now = Date.now();
-    const cutoff = now - this.DEDUPE_WINDOW_MS * 2;
+    const cutoff = now - this.DEDUPE_WINDOW_MS * DEDUPE_CLEANUP_MULTIPLIER;
 
     for (const [userId, timestamp] of this.recentJoins.entries()) {
       if (timestamp < cutoff) {

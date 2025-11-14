@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { loadBetterSqlite3 } from './SqliteLoader';
+import { KEYV_CLEANUP_INTERVAL_MS } from '../constants';
 
 /**
  * Keyv store adapter using better-sqlite3
@@ -50,7 +51,7 @@ export class KeyvBetterSqliteStore extends EventEmitter {
   private startAutoCleanup(): void {
     this.cleanupTimer = setInterval(() => {
       this.cleanupExpired();
-    }, 60 * 60 * 1000); // 1 hour
+    }, KEYV_CLEANUP_INTERVAL_MS);
   }
 
   /**

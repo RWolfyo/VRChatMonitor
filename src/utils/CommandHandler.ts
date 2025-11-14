@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { VRChatMonitor } from '../core/VRChatMonitor';
 import { APP_VERSION, APP_NAME, APP_BUILD } from '../version';
 import { Logger } from './Logger';
+import { CONSOLE_SEPARATOR_WIDTH, MONITOR_RESTART_DELAY_MS, COMMAND_PROMPT_REDRAW_DEBOUNCE_MS } from '../constants';
 
 export interface Command {
   name: string;
@@ -61,11 +62,11 @@ export class CommandHandler {
       handler: async () => {
         console.log();
         console.log(chalk.cyan.bold('🧪 Sending test alert...'));
-        console.log(chalk.gray('═'.repeat(61)));
+        console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
         console.log();
         await this.monitor.sendTestAlert();
         console.log();
-        console.log(chalk.gray('═'.repeat(61)));
+        console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
         console.log(chalk.green('✓ Test alert completed'));
         console.log();
       },
@@ -128,7 +129,7 @@ export class CommandHandler {
 
         console.log();
         console.log(chalk.cyan.bold(`🔍 Checking user ID: ${userId}`));
-        console.log(chalk.gray('═'.repeat(61)));
+        console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
         console.log();
 
         try {
@@ -194,7 +195,7 @@ export class CommandHandler {
           console.log();
         }
 
-        console.log(chalk.gray('═'.repeat(61)));
+        console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
         console.log();
       },
     });
@@ -234,7 +235,7 @@ export class CommandHandler {
         console.log(chalk.yellow('🔄 Restarting monitor...'));
         console.log();
         await this.monitor.stop();
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, MONITOR_RESTART_DELAY_MS));
         await this.monitor.start();
         console.log();
         console.log(chalk.green('✓ Monitor restarted successfully'));
@@ -277,7 +278,7 @@ export class CommandHandler {
       handler: async () => {
         console.log();
         console.log(chalk.cyan.bold('🚀 Starting update process...'));
-        console.log(chalk.gray('═'.repeat(61)));
+        console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
         console.log();
 
         const success = await this.monitor.performUpdate();
@@ -582,7 +583,7 @@ export class CommandHandler {
         }
       }
       this.promptRedrawTimer = null;
-    }, 50);
+    }, COMMAND_PROMPT_REDRAW_DEBOUNCE_MS);
   }
 
   /**
@@ -651,7 +652,7 @@ export class CommandHandler {
   private printHelp(): void {
     console.log();
     console.log(chalk.white.bold('Available Commands:'));
-    console.log(chalk.gray('═'.repeat(61)));
+    console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
     console.log();
 
     // Get unique commands (exclude aliases)
@@ -682,7 +683,7 @@ export class CommandHandler {
       console.log();
     }
 
-    console.log(chalk.gray('═'.repeat(61)));
+    console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
     console.log();
   }
 
@@ -694,7 +695,7 @@ export class CommandHandler {
 
     console.log();
     console.log(chalk.white.bold('Monitor Status:'));
-    console.log(chalk.gray('═'.repeat(61)));
+    console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
     console.log();
 
     // Running status
@@ -714,7 +715,7 @@ export class CommandHandler {
       this.printBlocklistStats(status.blocklistStats);
     }
 
-    console.log(chalk.gray('═'.repeat(61)));
+    console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
     console.log();
   }
 
