@@ -1,6 +1,6 @@
 {
   "name": "vrchat-monitor",
-  "version": "2.0.4",
+  "version": "2.1.0",
   "description": "Advanced VRChat instance monitor with blocklist checking and real-time notifications",
   "type": "commonjs",
   "main": "dist/vrc-monitor.exe",
