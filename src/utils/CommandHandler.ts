@@ -609,8 +609,11 @@ export class CommandHandler {
     this.promptRedrawTimer = setTimeout(() => {
       // Only redraw if we're not currently executing a command
       if (!this.isExecutingCommand) {
-        // The logger already printed newlines, so just redraw the prompt on the current line
-        // No need to add extra newlines
+        // Clear any partial prompt from the current line and redraw
+        process.stdout.write('\r'); // Move to beginning of line
+        process.stdout.write('\x1b[K'); // Clear to end of line
+
+        // Redraw prompt with current input
         this.showPrompt();
         process.stdout.write(this.currentInput);
 
