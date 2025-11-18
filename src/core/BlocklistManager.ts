@@ -1,6 +1,7 @@
 import fs from 'fs';
 import https from 'https';
 import { EventEmitter } from 'events';
+import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 import { loadBetterSqlite3 } from '../utils/SqliteLoader';
 import { Logger } from '../utils/Logger';
 import { PathResolver } from '../utils/PathResolver';
@@ -37,12 +38,17 @@ export class BlocklistManager extends EventEmitter {
   private compiledKeywordPatterns: RegExp[] = [];
   private updateInProgress: boolean = false;
   private updateQueue: Array<() => void> = [];
+  private obscenityMatcher: RegExpMatcher | null = null;
+  private obscenityEnabled: boolean = true;
+  private obscenityMatchSeverity: Severity = 'high';
 
   constructor(
     vrchatAPI: VRChatAPIService,
     remoteUrl: string,
     autoUpdate: boolean = true,
-    updateInterval: number = 60
+    updateInterval: number = 60,
+    obscenityEnabled: boolean = true,
+    obscenityMatchSeverity: Severity = 'high'
   ) {
     super();
     this.logger = Logger.getInstance();
@@ -51,6 +57,8 @@ export class BlocklistManager extends EventEmitter {
     this.remoteUrl = remoteUrl;
     this.autoUpdate = autoUpdate;
     this.updateInterval = updateInterval;
+    this.obscenityEnabled = obscenityEnabled;
+    this.obscenityMatchSeverity = obscenityMatchSeverity;
 
     // Load better-sqlite3 with proper native module resolution
     this.Database = loadBetterSqlite3();
@@ -61,6 +69,71 @@ export class BlocklistManager extends EventEmitter {
       throw new Error('blocklist.db not found. Please ensure it exists in the application directory.');
     }
     this.blocklistPath = foundPath;
+
+    // Initialize obscenity matcher if enabled
+    if (this.obscenityEnabled) {
+      this.initializeObscenityMatcher();
+    }
+  }
+
+  /**
+   * Initialize obscenity matcher for offensive content detection
+   */
+  private initializeObscenityMatcher(): void {
+    try {
+      this.obscenityMatcher = new RegExpMatcher({
+        ...englishDataset.build(),
+        ...englishRecommendedTransformers,
+      });
+      this.logger.info('Obscenity filter initialized', {
+        enabled: this.obscenityEnabled,
+        severity: this.obscenityMatchSeverity,
+      });
+    } catch (error) {
+      this.logger.error('Failed to initialize obscenity matcher', createErrorContext(error));
+      this.obscenityMatcher = null;
+      this.obscenityEnabled = false;
+    }
+  }
+
+  /**
+   * Check text for offensive content using obscenity matcher
+   */
+  private checkObscenity(text: string, context: import('../types/blocklist').KeywordMatchLocation): Match | null {
+    if (!this.obscenityEnabled || !this.obscenityMatcher || !text) {
+      return null;
+    }
+
+    try {
+      const matches = this.obscenityMatcher.getAllMatches(text);
+
+      if (matches.length > 0) {
+        // Extract matched text from first match
+        const firstMatch = matches[0];
+        const matchedText = text.substring(firstMatch.startIndex, firstMatch.endIndex + 1);
+
+        this.logger.verbose('BlocklistManager: MATCH - Obscenity filter detected offensive content', {
+          context,
+          matchedText,
+          matchCount: matches.length,
+        });
+
+        return {
+          type: 'keywordUser', // Use keywordUser type for profile matches
+          details: `Offensive content detected in ${context}`,
+          severity: this.obscenityMatchSeverity,
+          keyword: '[Obscenity Filter]',
+          keywordMatchLocation: context,
+          matchedText: matchedText,
+          reason: `Offensive or inappropriate language detected in ${context}`,
+          author: 'Obscenity Filter',
+        };
+      }
+    } catch (error) {
+      this.logger.warn('Obscenity check failed', createErrorContext(error, { context, textLength: text.length }));
+    }
+
+    return null;
   }
 
   /**
@@ -603,24 +676,38 @@ export class BlocklistManager extends EventEmitter {
         continue;
       }
 
-      // Check keyword patterns
+      // Check keyword patterns against all group fields
       for (const pattern of this.compiledKeywordPatterns) {
         const matchesName = pattern.test(group.name || '');
         const matchesDesc = pattern.test(group.description || '');
+        const matchesRules = group.rules ? pattern.test(group.rules) : false;
 
         this.logger.verbose('BlocklistManager: Keyword pattern test', {
           groupId: actualGroupId,
           pattern: pattern.source,
           matchesName,
           matchesDesc,
+          matchesRules,
           groupName: group.name,
-          groupDescription: group.description
+          groupDescription: group.description,
+          groupRules: group.rules
         });
 
-        if (matchesName || matchesDesc) {
+        if (matchesName || matchesDesc || matchesRules) {
           const patternInfo = this.db.prepare('SELECT * FROM keyword_blacklist WHERE pattern = ?').get(pattern.source);
-          const matchedText = matchesName ? group.name : group.description;
-          const matchLocation = matchesName ? 'groupName' : 'groupDescription';
+          let matchedText = '';
+          let matchLocation: import('../types/blocklist').KeywordMatchLocation = 'groupName';
+
+          if (matchesName) {
+            matchedText = group.name;
+            matchLocation = 'groupName';
+          } else if (matchesDesc) {
+            matchedText = group.description;
+            matchLocation = 'groupDescription';
+          } else if (matchesRules) {
+            matchedText = group.rules;
+            matchLocation = 'groupRules';
+          }
 
           this.logger.verbose('BlocklistManager: MATCH - Keyword pattern matched', {
             groupId: actualGroupId,
@@ -647,6 +734,40 @@ export class BlocklistManager extends EventEmitter {
           break;
         }
       }
+
+      // Check group name and description with obscenity filter
+      const obscenityNameMatch = this.checkObscenity(group.name || '', 'groupName');
+      if (obscenityNameMatch) {
+        matches.push({
+          ...obscenityNameMatch,
+          type: 'keywordGroup',
+          groupId: actualGroupId,
+          groupName: group.name,
+        });
+      }
+
+      const obscenityDescMatch = this.checkObscenity(group.description || '', 'groupDescription');
+      if (obscenityDescMatch) {
+        matches.push({
+          ...obscenityDescMatch,
+          type: 'keywordGroup',
+          groupId: actualGroupId,
+          groupName: group.name,
+        });
+      }
+
+      // Check group rules with obscenity filter (if available)
+      if (group.rules) {
+        const obscenityRulesMatch = this.checkObscenity(group.rules, 'groupRules');
+        if (obscenityRulesMatch) {
+          matches.push({
+            ...obscenityRulesMatch,
+            type: 'keywordGroup',
+            groupId: actualGroupId,
+            groupName: group.name,
+          });
+        }
+      }
     }
 
     // Check user profile for keyword patterns
@@ -667,23 +788,54 @@ export class BlocklistManager extends EventEmitter {
         }
       });
 
+      // Check regex keyword patterns against all profile fields
       for (const pattern of this.compiledKeywordPatterns) {
         const matchesDisplayName = pattern.test(profile.displayName || '');
         const matchesBio = pattern.test(profile.bio || '');
+        const matchesStatus = pattern.test(profile.statusDescription || '');
+
+        // Check pronouns if available
+        let matchesPronouns = false;
+        let pronounsText = '';
+        if (profile.tags && Array.isArray(profile.tags)) {
+          const pronounsTag = profile.tags.find((tag: string) => tag.startsWith('pronouns_'));
+          if (pronounsTag) {
+            pronounsText = pronounsTag.replace('pronouns_', '').replace(/_/g, ' ');
+            matchesPronouns = pattern.test(pronounsText);
+          }
+        }
 
         this.logger.verbose('BlocklistManager: Profile keyword pattern test', {
           userId,
           pattern: pattern.source,
           matchesDisplayName,
           matchesBio,
+          matchesStatus,
+          matchesPronouns,
           displayName: profile.displayName,
-          bio: profile.bio
+          bio: profile.bio,
+          statusDescription: profile.statusDescription,
+          pronouns: pronounsText
         });
 
-        if (matchesDisplayName || matchesBio) {
+        if (matchesDisplayName || matchesBio || matchesStatus || matchesPronouns) {
           const patternInfo = this.db.prepare('SELECT * FROM keyword_blacklist WHERE pattern = ?').get(pattern.source);
-          const matchedText = matchesDisplayName ? profile.displayName : profile.bio;
-          const matchLocation = matchesDisplayName ? 'displayName' : 'bio';
+          let matchedText = '';
+          let matchLocation: import('../types/blocklist').KeywordMatchLocation = 'displayName';
+
+          if (matchesDisplayName) {
+            matchedText = profile.displayName;
+            matchLocation = 'displayName';
+          } else if (matchesBio) {
+            matchedText = profile.bio;
+            matchLocation = 'bio';
+          } else if (matchesStatus) {
+            matchedText = profile.statusDescription;
+            matchLocation = 'statusDescription';
+          } else if (matchesPronouns) {
+            matchedText = pronounsText;
+            matchLocation = 'pronouns';
+          }
 
           this.logger.verbose('BlocklistManager: MATCH - Profile keyword matched', {
             userId,
@@ -703,6 +855,34 @@ export class BlocklistManager extends EventEmitter {
             reason: patternInfo?.reason || `Keyword pattern matched in user ${matchLocation}`,
             author: patternInfo?.author || 'Unknown',
           });
+        }
+      }
+
+      // Check profile fields with obscenity filter
+      const obscenityDisplayNameMatch = this.checkObscenity(profile.displayName || '', 'displayName');
+      if (obscenityDisplayNameMatch) {
+        matches.push(obscenityDisplayNameMatch);
+      }
+
+      const obscenityBioMatch = this.checkObscenity(profile.bio || '', 'bio');
+      if (obscenityBioMatch) {
+        matches.push(obscenityBioMatch);
+      }
+
+      const obscenityStatusMatch = this.checkObscenity(profile.statusDescription || '', 'statusDescription');
+      if (obscenityStatusMatch) {
+        matches.push(obscenityStatusMatch);
+      }
+
+      // Check pronouns tag if available (VRChat stores custom pronouns in tags)
+      if (profile.tags && Array.isArray(profile.tags)) {
+        const pronounsTag = profile.tags.find((tag: string) => tag.startsWith('pronouns_'));
+        if (pronounsTag) {
+          const pronouns = pronounsTag.replace('pronouns_', '').replace(/_/g, ' ');
+          const obscenityPronounsMatch = this.checkObscenity(pronouns, 'pronouns');
+          if (obscenityPronounsMatch) {
+            matches.push(obscenityPronounsMatch);
+          }
         }
       }
     } catch (error) {

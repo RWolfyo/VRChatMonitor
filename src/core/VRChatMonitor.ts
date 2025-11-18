@@ -213,7 +213,9 @@ export class VRChatMonitor extends EventEmitter {
       this.vrchatAPI,
       this.config.blocklist.remoteUrl,
       this.config.blocklist.autoUpdate,
-      this.config.blocklist.updateInterval
+      this.config.blocklist.updateInterval,
+      this.config.blocklist.obscenityFilter.enabled,
+      this.config.blocklist.obscenityFilter.severity as 'low' | 'medium' | 'high'
     );
 
     // Listen for blocklist events

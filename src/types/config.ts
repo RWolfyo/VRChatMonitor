@@ -1,4 +1,5 @@
 export interface Config {
+  version?: number; // Config schema version for migrations
   vrchat: VRChatConfig;
   notifications: NotificationConfig;
   audio: AudioConfig;
@@ -38,6 +39,10 @@ export interface BlocklistConfig {
   autoUpdate: boolean;
   remoteUrl: string;
   updateInterval: number;
+  obscenityFilter: {
+    enabled: boolean;
+    severity: 'low' | 'medium' | 'high';
+  };
 }
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'verbose';

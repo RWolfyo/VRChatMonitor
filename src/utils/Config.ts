@@ -55,7 +55,10 @@ export class ConfigManager {
   public load(): Config {
     try {
       const configText = fs.readFileSync(this.configPath, 'utf-8');
-      const parsedConfig = JSON.parse(configText) as Config;
+      let parsedConfig = JSON.parse(configText) as Partial<Config>;
+
+      // Migrate config if needed
+      parsedConfig = this.migrateConfig(parsedConfig);
 
       // Validate and apply defaults
       this.config = this.validateAndApplyDefaults(parsedConfig);
@@ -66,6 +69,67 @@ export class ConfigManager {
       this.logger.error('Failed to load configuration', { error });
       throw new Error(`Failed to load config.json: ${error}`);
     }
+  }
+
+  /**
+   * Migrate config from older versions to current schema
+   */
+  private migrateConfig(config: Partial<Config>): Partial<Config> {
+    const CURRENT_CONFIG_VERSION = 2;
+    const configVersion = config.version || 1;
+
+    if (configVersion >= CURRENT_CONFIG_VERSION) {
+      // Config is up to date
+      return config;
+    }
+
+    this.logger.info(`Migrating config from version ${configVersion} to ${CURRENT_CONFIG_VERSION}`);
+
+    let migrated = { ...config };
+    let migrationApplied = false;
+
+    // Migration v1 -> v2: Add obscenityFilter to blocklist
+    if (configVersion < 2) {
+      this.logger.info('Applying migration v1 -> v2: Adding obscenityFilter configuration');
+
+      // Add obscenityFilter if it doesn't exist
+      if (!migrated.blocklist) {
+        migrated.blocklist = {} as any;
+      }
+
+      const blocklistConfig = migrated.blocklist as any;
+      if (!blocklistConfig.obscenityFilter) {
+        blocklistConfig.obscenityFilter = {
+          enabled: true,
+          severity: 'high',
+        };
+        migrationApplied = true;
+      }
+    }
+
+    // Update version number
+    migrated.version = CURRENT_CONFIG_VERSION;
+
+    // Save migrated config back to file
+    if (migrationApplied) {
+      try {
+        this.saveConfigToFile(migrated);
+        this.logger.info('Config migration completed and saved to file');
+      } catch (error) {
+        this.logger.warn('Failed to save migrated config to file', { error });
+        this.logger.warn('Please manually update your config.json to include the new "obscenityFilter" settings');
+      }
+    }
+
+    return migrated;
+  }
+
+  /**
+   * Save config to file (used for migrations and credential saving)
+   */
+  private saveConfigToFile(config: Partial<Config>): void {
+    const configJson = JSON.stringify(config, null, 2);
+    fs.writeFileSync(this.configPath, configJson, 'utf-8');
   }
 
   private validateAndApplyDefaults(config: Partial<Config>): Config {
@@ -111,6 +175,7 @@ export class ConfigManager {
     }
 
     return {
+      version: config.version || 2, // Current config version
       vrchat: {
         username: config.vrchat?.username || '',
         password: config.vrchat?.password || '',
@@ -139,6 +204,10 @@ export class ConfigManager {
         autoUpdate: config.blocklist?.autoUpdate ?? true,
         remoteUrl: config.blocklist?.remoteUrl || 'https://raw.githubusercontent.com/RWolfyo/VRChatMonitor/refs/heads/master/blockedGroups.jsonc',
         updateInterval: updateInterval,
+        obscenityFilter: {
+          enabled: config.blocklist?.obscenityFilter?.enabled ?? true,
+          severity: config.blocklist?.obscenityFilter?.severity || 'high',
+        },
       },
       logging: {
         level: validLogLevels.includes(logLevel) ? logLevel as Config['logging']['level'] : 'info',

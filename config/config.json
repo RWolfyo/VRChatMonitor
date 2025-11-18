@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "vrchat": {
     "username": "",
     "password": ""
@@ -26,7 +27,11 @@
   "blocklist": {
     "autoUpdate": true,
     "remoteUrl": "https://vrcm.winter.tf/blocklist.db",
-    "updateInterval": 60
+    "updateInterval": 60,
+    "obscenityFilter": {
+      "enabled": true,
+      "severity": "high"
+    }
   },
   "logging": {
     "level": "info",

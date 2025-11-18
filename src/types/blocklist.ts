@@ -59,7 +59,7 @@ export interface NormalizedBlocklistData {
 }
 
 export type MatchType = 'blockedGroup' | 'blockedUser' | 'keywordGroup' | 'keywordUser';
-export type KeywordMatchLocation = 'bio' | 'displayName' | 'groupName' | 'groupDescription';
+export type KeywordMatchLocation = 'bio' | 'displayName' | 'groupName' | 'groupDescription' | 'groupRules' | 'statusDescription' | 'pronouns';
 
 export interface Match {
   type: MatchType;
