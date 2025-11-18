@@ -1,7 +1,8 @@
 import fs from 'fs';
 import https from 'https';
 import { EventEmitter } from 'events';
-import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
+import { RegExpMatcher, englishRecommendedTransformers } from 'obscenity';
+import { createCustomObscenityDataset, getCustomDatasetTermCount } from '../utils/CustomObscenityDataset';
 import { loadBetterSqlite3 } from '../utils/SqliteLoader';
 import { Logger } from '../utils/Logger';
 import { PathResolver } from '../utils/PathResolver';
@@ -78,16 +79,19 @@ export class BlocklistManager extends EventEmitter {
 
   /**
    * Initialize obscenity matcher for offensive content detection
+   * Uses custom filtered dataset with only severe terms (slurs, hate speech)
    */
   private initializeObscenityMatcher(): void {
     try {
+      const customDataset = createCustomObscenityDataset();
       this.obscenityMatcher = new RegExpMatcher({
-        ...englishDataset.build(),
+        ...customDataset.build(),
         ...englishRecommendedTransformers,
       });
-      this.logger.info('Obscenity filter initialized', {
+      this.logger.info('Obscenity filter initialized with custom dataset', {
         enabled: this.obscenityEnabled,
         severity: this.obscenityMatchSeverity,
+        termCount: getCustomDatasetTermCount(),
       });
     } catch (error) {
       this.logger.error('Failed to initialize obscenity matcher', createErrorContext(error));
