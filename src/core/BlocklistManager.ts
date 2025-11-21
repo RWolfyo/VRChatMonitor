@@ -611,7 +611,19 @@ export class BlocklistManager extends EventEmitter {
     // Get user groups
     let groups: any[] = [];
     try {
-      groups = await this.vrchatAPI.getUserGroups(userId);
+      const fetchedGroups = await this.vrchatAPI.getUserGroups(userId);
+
+      // Validate that we got an array
+      if (!Array.isArray(fetchedGroups)) {
+        this.logger.error('getUserGroups returned non-array value', {
+          userId,
+          type: typeof fetchedGroups,
+          value: fetchedGroups
+        });
+        throw new Error('Invalid response from getUserGroups: expected array');
+      }
+
+      groups = fetchedGroups;
       this.logger.verbose('BlocklistManager: User groups retrieved', {
         userId,
         groupCount: groups.length,
@@ -621,6 +633,8 @@ export class BlocklistManager extends EventEmitter {
       this.logger.error('Failed to fetch user groups - cannot verify group membership', createErrorContext(error, {
         userId
       }));
+      // Reset groups to empty array to ensure we can safely continue
+      groups = [];
       // Don't return - we can still check keywords in profile
       // But add a warning match to alert about the API failure
       matches.push({
