@@ -219,6 +219,19 @@ export class VRChatAPIService {
       // Test if session is still valid
       try {
         const user = await this.getCurrentUser();
+
+        // Validate that we got a proper user object with required fields
+        if (!user || !user.id || (!user.displayName && !user.username)) {
+          this.logger.warn('Session returned invalid user data', {
+            hasUser: !!user,
+            hasId: !!user?.id,
+            hasDisplayName: !!user?.displayName,
+            hasUsername: !!user?.username,
+            userData: user
+          });
+          throw new Error('Invalid user data from session - session may be expired');
+        }
+
         this.currentUser = user;
         this.sessionTimestamp = storedSession.timestamp;
 
@@ -229,7 +242,7 @@ export class VRChatAPIService {
           keys: Object.keys(user).slice(0, 10)
         });
 
-        this.logger.info(`✓ Logged in as: ${user.displayName || user.username || 'Unknown'} (session reuse)`, {
+        this.logger.info(`✓ Logged in as: ${user.displayName || user.username} (session reuse)`, {
           userId: user.id,
         });
 
