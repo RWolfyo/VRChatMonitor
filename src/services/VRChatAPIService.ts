@@ -5,6 +5,7 @@ import { Logger } from '../utils/Logger';
 import { PathResolver } from '../utils/PathResolver';
 import { LoginPrompt } from '../utils/LoginPrompt';
 import { KeyvBetterSqliteStore } from '../utils/KeyvBetterSqliteStore';
+import { getErrorMessage } from '../utils/ErrorUtils';
 import { APP_VERSION } from '../version';
 import {
   API_CACHE_DURATION_MS,
