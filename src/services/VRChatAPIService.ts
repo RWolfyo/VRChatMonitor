@@ -216,8 +216,11 @@ export class VRChatAPIService {
 
       this.logger.debug('VRChat client initialized with stored session');
 
-      // Test if session is still valid
+      // Test if session is still valid with comprehensive validation
       try {
+        this.logger.debug('Testing session validity...');
+
+        // First, test getCurrentUser
         const user = await this.getCurrentUser();
 
         // Validate that we got a proper user object with required fields
@@ -230,6 +233,24 @@ export class VRChatAPIService {
             userData: user
           });
           throw new Error('Invalid user data from session - session may be expired');
+        }
+
+        // Additionally test a protected endpoint to ensure session really works
+        // Try to fetch user's own groups - this will fail if session is expired
+        this.logger.debug('Validating session with protected API call...');
+        try {
+          const testGroups = await this.getUserGroups(user.id);
+          this.logger.debug('Session validation successful', {
+            userId: user.id,
+            canAccessProtectedEndpoints: true,
+            groupCount: testGroups?.length || 0
+          });
+        } catch (groupError) {
+          this.logger.warn('Session fails on protected endpoints', {
+            error: groupError,
+            userId: user.id
+          });
+          throw new Error('Session expired - cannot access protected endpoints');
         }
 
         this.currentUser = user;
@@ -256,7 +277,9 @@ export class VRChatAPIService {
 
         return true;
       } catch (error) {
-        this.logger.warn('Stored session is invalid, will re-login');
+        this.logger.warn('Stored session is invalid, will re-login', {
+          error: getErrorMessage(error)
+        });
         await this.keyv.delete('session');
         return false;
       }
