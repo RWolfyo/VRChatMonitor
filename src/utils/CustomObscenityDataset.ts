@@ -138,11 +138,6 @@ const SEVERE_TERMS = new Set([
   'tard',
   'window-licker',
 
-  // Misogynistic/gender-based slurs (3)
-  'bimbo',
-  'hoe',
-  'slut',
-
   // Hate symbols/phrases (2)
   'swastika',
   '1488',
