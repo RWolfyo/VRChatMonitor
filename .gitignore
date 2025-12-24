@@ -9,6 +9,9 @@ build/
 # References
 references/
 
+# Private web app
+web-app/
+
 # Claude Code
 .claude/
 CLAUDE.md
