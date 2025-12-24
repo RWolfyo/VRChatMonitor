@@ -182,6 +182,38 @@ export class BlocklistManager extends EventEmitter {
   }
 
   /**
+   * Extract group ID from VRChat URL or return the input if it's already an ID
+   * Handles formats like:
+   * - https://vrchat.com/home/group/grp_xxx
+   * - https://www.vrchat.com/home/group/grp_xxx
+   * - grp_xxx (already an ID)
+   */
+  private extractGroupId(input: string): string {
+    if (!input) return input;
+
+    // Check if it's already a group ID (grp_xxx format)
+    if (input.startsWith('grp_')) {
+      return input;
+    }
+
+    // Try to extract from URL
+    try {
+      // Match VRChat group URL patterns
+      const urlPattern = /(?:https?:\/\/)?(?:www\.)?vrchat\.com\/home\/group\/(grp_[a-f0-9-]+)/i;
+      const match = input.match(urlPattern);
+
+      if (match && match[1]) {
+        return match[1];
+      }
+    } catch (error) {
+      this.logger.warn('Failed to parse potential group URL', { input, error });
+    }
+
+    // Return original input if no extraction was possible
+    return input;
+  }
+
+  /**
    * Compile keyword patterns for faster matching
    */
   private compileKeywordPatterns(): void {
@@ -660,7 +692,15 @@ export class BlocklistManager extends EventEmitter {
       });
 
       // Skip whitelisted groups
-      const whitelistedGroup = this.db.prepare('SELECT * FROM whitelist_groups WHERE group_id = ?').get(actualGroupId);
+      // First try direct match, then check all whitelist entries and extract IDs
+      let whitelistedGroup = this.db.prepare('SELECT * FROM whitelist_groups WHERE group_id = ?').get(actualGroupId);
+
+      if (!whitelistedGroup) {
+        // Check if any whitelist entry matches after URL extraction
+        const allWhitelisted = this.db.prepare('SELECT * FROM whitelist_groups').all();
+        whitelistedGroup = allWhitelisted.find((entry: any) => this.extractGroupId(entry.group_id) === actualGroupId);
+      }
+
       if (whitelistedGroup) {
         this.logger.debug(`Group ${actualGroupId} is whitelisted`, { name: group.name });
         this.logger.verbose('BlocklistManager: Group whitelisted', { groupId: actualGroupId, data: whitelistedGroup });
@@ -668,7 +708,14 @@ export class BlocklistManager extends EventEmitter {
       }
 
       // Check blocked groups
-      const blockedGroup = this.db.prepare('SELECT * FROM blocked_groups WHERE group_id = ?').get(actualGroupId);
+      // First try direct match, then check all blocked entries and extract IDs
+      let blockedGroup = this.db.prepare('SELECT * FROM blocked_groups WHERE group_id = ?').get(actualGroupId);
+
+      if (!blockedGroup) {
+        // Check if any blocked entry matches after URL extraction
+        const allBlocked = this.db.prepare('SELECT * FROM blocked_groups').all();
+        blockedGroup = allBlocked.find((entry: any) => this.extractGroupId(entry.group_id) === actualGroupId);
+      }
       this.logger.verbose('BlocklistManager: Group block check', {
         groupId: actualGroupId,
         blocked: !!blockedGroup,
