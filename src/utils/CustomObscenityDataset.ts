@@ -141,6 +141,10 @@ const SEVERE_TERMS = new Set([
   // Hate symbols/phrases (2)
   'swastika',
   '1488',
+
+  // Custom
+  'epstein',
+  'diddy',
 ]);
 
 /**
