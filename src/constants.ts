@@ -110,6 +110,28 @@ export const DEDUPE_CLEANUP_MULTIPLIER = 2;
 export const DEDUPE_MAP_MAX_SIZE = 10000; // Maximum number of join records to keep
 
 // ============================================================================
+// Avatar Scanning
+// ============================================================================
+export const AVATAR_PERFORMANCE_RATING_ORDER = ['Excellent', 'Good', 'Medium', 'Poor', 'VeryPoor'] as const;
+
+export const DEFAULT_AVATAR_THRESHOLDS = {
+  totalPolygons: 70000,
+  particleSystemCount: 8,
+  totalMaxParticles: 10000,
+  boneCount: 400,
+  physBoneComponentCount: 32,
+  materialCount: 20,
+  lightCount: 0,
+  audioSourceCount: 8,
+} as const;
+
+// ============================================================================
+// Progress Bar Display
+// ============================================================================
+export const PROGRESS_BAR_PERCENTAGE_MULTIPLIER = 100;
+export const PROGRESS_BAR_UPDATE_THROTTLE_MS = 100;
+
+// ============================================================================
 // General Utility
 // ============================================================================
 export const SECONDS_TO_MS = 1000;

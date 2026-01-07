@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { Config } from '../types/config';
 import { Logger } from './Logger';
+import { DEFAULT_AVATAR_THRESHOLDS } from '../constants';
 
 export class ConfigManager {
   private config: Config | null = null;
@@ -128,31 +129,32 @@ export class ConfigManager {
       }
     }
 
-    // Migration v2 -> v3: Add avatarScanning to advanced
+    // Migration v2 -> v3: Add avatarScanning and skipFriends to advanced
     if (configVersion < 3) {
-      this.logger.info('Applying migration v2 -> v3: Adding avatarScanning configuration');
+      this.logger.info('Applying migration v2 -> v3: Adding avatarScanning and skipFriends configuration');
 
       if (!migrated.advanced) {
         migrated.advanced = {} as any;
       }
 
       const advancedConfig = migrated.advanced as any;
+
+      // Add skipFriends if it doesn't exist
+      if (advancedConfig.skipFriends === undefined) {
+        advancedConfig.skipFriends = true; // Skip friends by default
+        migrationApplied = true;
+      }
+
+      // Add avatarScanning if it doesn't exist
       if (!advancedConfig.avatarScanning) {
         advancedConfig.avatarScanning = {
           enabled: true, // Enabled by default
           scanOnJoin: true,
           scanOnChange: true,
           cacheExpiry: 60,
-          thresholds: {
-            totalPolygons: 70000,
-            particleSystemCount: 8,
-            totalMaxParticles: 10000,
-            boneCount: 400,
-            physBoneComponentCount: 32,
-            materialCount: 20,
-            lightCount: 0,
-            audioSourceCount: 8,
-          },
+          autoHideAvatar: false, // Disabled by default (opt-in)
+          autoHideBlacklisted: false, // Disabled by default (opt-in)
+          thresholds: { ...DEFAULT_AVATAR_THRESHOLDS },
         };
         migrationApplied = true;
       }
@@ -267,6 +269,7 @@ export class ConfigManager {
       advanced: {
         cacheDir: config.advanced?.cacheDir || '',
         deduplicateWindow: deduplicateWindow,
+        skipFriends: config.advanced?.skipFriends ?? true, // Skip friends by default
         trustRankAlerts: {
           enabled: config.advanced?.trustRankAlerts?.enabled ?? true,
           minimumRank: config.advanced?.trustRankAlerts?.minimumRank || 'new_user', // Warn for visitor by default
@@ -280,21 +283,22 @@ export class ConfigManager {
           scanOnChange: config.advanced?.avatarScanning?.scanOnChange ?? true, // Enabled by default
           cacheExpiry: config.advanced?.avatarScanning?.cacheExpiry ?? 60,
           autoHideAvatar: config.advanced?.avatarScanning?.autoHideAvatar ?? false, // Disabled by default
+          autoHideBlacklisted: config.advanced?.avatarScanning?.autoHideBlacklisted ?? false, // Disabled by default
           thresholds: {
-            totalPolygons: config.advanced?.avatarScanning?.thresholds?.totalPolygons ?? 70000,
+            totalPolygons: config.advanced?.avatarScanning?.thresholds?.totalPolygons ?? DEFAULT_AVATAR_THRESHOLDS.totalPolygons,
             totalVertices: config.advanced?.avatarScanning?.thresholds?.totalVertices,
-            particleSystemCount: config.advanced?.avatarScanning?.thresholds?.particleSystemCount ?? 8,
-            totalMaxParticles: config.advanced?.avatarScanning?.thresholds?.totalMaxParticles ?? 10000,
+            particleSystemCount: config.advanced?.avatarScanning?.thresholds?.particleSystemCount ?? DEFAULT_AVATAR_THRESHOLDS.particleSystemCount,
+            totalMaxParticles: config.advanced?.avatarScanning?.thresholds?.totalMaxParticles ?? DEFAULT_AVATAR_THRESHOLDS.totalMaxParticles,
             particleCollisionEnabled: config.advanced?.avatarScanning?.thresholds?.particleCollisionEnabled,
             particleTrailsEnabled: config.advanced?.avatarScanning?.thresholds?.particleTrailsEnabled,
-            boneCount: config.advanced?.avatarScanning?.thresholds?.boneCount ?? 400,
-            physBoneComponentCount: config.advanced?.avatarScanning?.thresholds?.physBoneComponentCount ?? 32,
+            boneCount: config.advanced?.avatarScanning?.thresholds?.boneCount ?? DEFAULT_AVATAR_THRESHOLDS.boneCount,
+            physBoneComponentCount: config.advanced?.avatarScanning?.thresholds?.physBoneComponentCount ?? DEFAULT_AVATAR_THRESHOLDS.physBoneComponentCount,
             physBoneColliderCount: config.advanced?.avatarScanning?.thresholds?.physBoneColliderCount,
             physBoneTransformCount: config.advanced?.avatarScanning?.thresholds?.physBoneTransformCount,
-            materialCount: config.advanced?.avatarScanning?.thresholds?.materialCount ?? 20,
+            materialCount: config.advanced?.avatarScanning?.thresholds?.materialCount ?? DEFAULT_AVATAR_THRESHOLDS.materialCount,
             meshCount: config.advanced?.avatarScanning?.thresholds?.meshCount,
-            lightCount: config.advanced?.avatarScanning?.thresholds?.lightCount ?? 0,
-            audioSourceCount: config.advanced?.avatarScanning?.thresholds?.audioSourceCount ?? 8,
+            lightCount: config.advanced?.avatarScanning?.thresholds?.lightCount ?? DEFAULT_AVATAR_THRESHOLDS.lightCount,
+            audioSourceCount: config.advanced?.avatarScanning?.thresholds?.audioSourceCount ?? DEFAULT_AVATAR_THRESHOLDS.audioSourceCount,
             fileSize: config.advanced?.avatarScanning?.thresholds?.fileSize,
             uncompressedSize: config.advanced?.avatarScanning?.thresholds?.uncompressedSize,
             totalTextureUsage: config.advanced?.avatarScanning?.thresholds?.totalTextureUsage,

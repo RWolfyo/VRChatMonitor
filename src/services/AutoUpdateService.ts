@@ -11,6 +11,8 @@ import {
   GITHUB_API_TIMEOUT_MS,
   UPDATE_SCRIPT_DELAY_MS,
   UPDATE_DOWNLOAD_TIMEOUT_MS,
+  PROGRESS_BAR_PERCENTAGE_MULTIPLIER,
+  PROGRESS_BAR_UPDATE_THROTTLE_MS,
 } from '../constants';
 
 interface GitHubRelease {
@@ -356,7 +358,7 @@ ${centerLine('')}
    * Render progress bar
    */
   private renderProgressBar(current: number, total: number, width: number = 40): string {
-    const percentage = total > 0 ? (current / total) * 100 : 0;
+    const percentage = total > 0 ? (current / total) * PROGRESS_BAR_PERCENTAGE_MULTIPLIER : 0;
     const filled = Math.round((width * current) / total);
     const empty = width - filled;
 
@@ -409,9 +411,9 @@ ${centerLine('')}
         response.on('data', (chunk: Buffer) => {
           downloadedSize += chunk.length;
 
-          // Update progress bar every 100ms to avoid flickering
+          // Update progress bar to avoid flickering
           const now = Date.now();
-          if (now - lastUpdate > 100 || downloadedSize === totalSize) {
+          if (now - lastUpdate > PROGRESS_BAR_UPDATE_THROTTLE_MS || downloadedSize === totalSize) {
             process.stdout.clearLine(0);
             process.stdout.cursorTo(0);
             process.stdout.write(this.renderProgressBar(downloadedSize, totalSize));

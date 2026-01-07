@@ -38,7 +38,6 @@ jobs:
 
       - name: Run type check
         run: npm run type-check
-        continue-on-error: true
 
       - name: Build executable
         run: npm run build

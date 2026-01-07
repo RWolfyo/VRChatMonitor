@@ -38,6 +38,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run type check
+        run: npm run type-check
+
       - name: Build executable
         run: |
           echo "Building VRChat Monitor..."

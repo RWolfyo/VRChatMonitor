@@ -1,6 +1,7 @@
 import type { VRChatAPIService } from './VRChatAPIService';
 import type { Logger } from '../utils/Logger';
 import type { AvatarThresholds } from '../types/config';
+import { MINUTES_TO_MS, AVATAR_PERFORMANCE_RATING_ORDER } from '../constants';
 
 export interface AvatarData {
   avatarId: string;
@@ -59,7 +60,7 @@ export class AvatarScannerService {
     private logger: Logger,
     cacheExpiryMinutes: number = 60
   ) {
-    this.cacheExpiryMs = cacheExpiryMinutes * 60 * 1000;
+    this.cacheExpiryMs = cacheExpiryMinutes * MINUTES_TO_MS;
   }
 
   /**
@@ -237,9 +238,8 @@ export class AvatarScannerService {
     if (!avatarData.stats) {
       // No stats available, can only check performance rating
       if (thresholds.performanceRating && avatarData.performanceRating) {
-        const ratingOrder = ['Excellent', 'Good', 'Medium', 'Poor', 'VeryPoor'];
-        const currentIndex = ratingOrder.indexOf(avatarData.performanceRating);
-        const thresholdIndex = ratingOrder.indexOf(thresholds.performanceRating);
+        const currentIndex = AVATAR_PERFORMANCE_RATING_ORDER.indexOf(avatarData.performanceRating as any);
+        const thresholdIndex = AVATAR_PERFORMANCE_RATING_ORDER.indexOf(thresholds.performanceRating as any);
 
         if (currentIndex > thresholdIndex) {
           violations.push({
@@ -330,9 +330,8 @@ export class AvatarScannerService {
 
     // Check performance rating
     if (thresholds.performanceRating && avatarData.performanceRating) {
-      const ratingOrder = ['Excellent', 'Good', 'Medium', 'Poor', 'VeryPoor'];
-      const currentIndex = ratingOrder.indexOf(avatarData.performanceRating);
-      const thresholdIndex = ratingOrder.indexOf(thresholds.performanceRating);
+      const currentIndex = AVATAR_PERFORMANCE_RATING_ORDER.indexOf(avatarData.performanceRating as any);
+      const thresholdIndex = AVATAR_PERFORMANCE_RATING_ORDER.indexOf(thresholds.performanceRating as any);
 
       if (currentIndex > thresholdIndex) {
         violations.push({
@@ -381,7 +380,7 @@ export class AvatarScannerService {
   public getCacheStats(): { size: number; expiryMinutes: number } {
     return {
       size: this.cache.size,
-      expiryMinutes: this.cacheExpiryMs / (60 * 1000),
+      expiryMinutes: this.cacheExpiryMs / MINUTES_TO_MS,
     };
   }
 }
