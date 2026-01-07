@@ -1,3 +1,35 @@
+/**
+ * VRChat Log File Watcher
+ *
+ * Monitors VRChat's output_log*.txt files for player join/leave events and emits
+ * events when players enter or exit the current instance.
+ *
+ * Features:
+ * - Automatic VRChat log directory detection (Windows, Linux/Proton, macOS)
+ * - Real-time log file monitoring using chokidar file watcher
+ * - Automatic log rotation handling (VRChat creates new logs on restart)
+ * - Position tracking to avoid re-parsing old content
+ * - Regex-based event extraction from log lines
+ * - Event emission for integration with monitoring system
+ *
+ * Log Patterns Monitored:
+ * - Join: "[Behaviour] OnPlayerJoined {displayName} ({userId})"
+ * - Leave: "[Behaviour] OnPlayerLeft {displayName} ({userId})"
+ *
+ * Technical Details:
+ * - Uses chokidar's awaitWriteFinish to prevent partial reads
+ * - Periodic rotation checks (60s) to catch new log files
+ * - Handles file truncation and disappearance gracefully
+ * - Only processes new content since last read (position tracking)
+ *
+ * Event Emission:
+ * - 'playerJoin': Emitted when user joins (PlayerJoinEvent)
+ * - 'playerLeave': Emitted when user leaves (PlayerLeaveEvent)
+ * - 'error': Emitted on file system or parsing errors
+ *
+ * @extends EventEmitter
+ */
+
 import fs from 'fs';
 import path from 'path';
 import { FSWatcher, watch } from 'chokidar';
@@ -13,25 +45,49 @@ import {
 } from '../constants';
 
 export class LogWatcher extends EventEmitter {
+  /** Chokidar file system watcher instance */
   private watcher: FSWatcher | null = null;
+
+  /** Logger instance for debug/error messages */
   private logger: Logger;
+
+  /** Path resolver for VRChat directory detection */
   private pathResolver: PathResolver;
+
+  /** Detected VRChat log directory path */
   private logDirectory: string | null = null;
+
+  /** Currently monitored log file path */
   private currentLogFile: string | null = null;
+
+  /** Last read position in current log file (byte offset) */
   private lastPosition: number = 0;
+
+  /** Whether log watcher is currently active */
   private isWatching: boolean = false;
+
+  /** Interval timer for periodic log rotation checks */
   private rotationCheckTimer: NodeJS.Timeout | null = null;
 
-  // Regex patterns for log parsing
+  /** Regex pattern for player join events in VRChat logs */
   private readonly JOIN_PATTERN = /\[Behaviour\] OnPlayerJoined (.+) \(([^)]+)\)/;
+
+  /** Regex pattern for player leave events in VRChat logs */
   private readonly LEAVE_PATTERN = /\[Behaviour\] OnPlayerLeft (.+) \(([^)]+)\)/;
 
+  /**
+   * Initialize the Log Watcher.
+   *
+   * Auto-detects VRChat log directory using PathResolver and validates access.
+   * Throws error if VRChat logs cannot be found.
+   *
+   * @throws Error if VRChat log directory cannot be detected
+   */
   constructor() {
     super();
     this.logger = Logger.getInstance();
     this.pathResolver = new PathResolver();
 
-    // Auto-detect VRChat log directory
     this.logDirectory = this.pathResolver.detectVRChatLogDir();
     if (!this.logDirectory) {
       throw new Error('Could not auto-detect VRChat log directory. Please ensure VRChat is installed in the default location.');
@@ -39,7 +95,13 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Start watching VRChat logs
+   * Start monitoring VRChat log files for player events.
+   *
+   * Initializes chokidar file watcher on the VRChat log directory, finds the most
+   * recent log file, and begins monitoring for changes. Sets up periodic rotation
+   * checks to detect new log files when VRChat restarts.
+   *
+   * @throws Error if watcher fails to initialize
    */
   public start(): void {
     if (this.isWatching) {
@@ -48,7 +110,6 @@ export class LogWatcher extends EventEmitter {
     }
 
     try {
-      // Find the most recent output_log file
       this.currentLogFile = this.findLatestLogFile();
       if (this.currentLogFile) {
         this.logger.info(`Monitoring log file: ${this.currentLogFile}`);
@@ -57,7 +118,6 @@ export class LogWatcher extends EventEmitter {
         this.logger.warn('No VRChat log files found yet. Waiting for VRChat to start...');
       }
 
-      // Watch the directory for new files and changes
       this.watcher = watch(this.logDirectory!, {
         persistent: true,
         ignoreInitial: false,
@@ -71,7 +131,6 @@ export class LogWatcher extends EventEmitter {
       this.watcher.on('change', (filePath) => this.handleFileChange(filePath));
       this.watcher.on('error', (error) => this.handleError(error instanceof Error ? error : new Error(String(error))));
 
-      // Start periodic rotation check
       this.startRotationCheck();
 
       this.isWatching = true;
@@ -83,7 +142,10 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Stop watching logs
+   * Stop monitoring VRChat log files and clean up resources.
+   *
+   * Closes the chokidar watcher, stops rotation check timer, and resets state.
+   * Safe to call multiple times.
    */
   public async stop(): Promise<void> {
     if (this.watcher) {
@@ -91,7 +153,6 @@ export class LogWatcher extends EventEmitter {
       this.watcher = null;
     }
 
-    // Stop rotation check timer
     if (this.rotationCheckTimer) {
       clearInterval(this.rotationCheckTimer);
       this.rotationCheckTimer = null;
@@ -102,7 +163,12 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Find the most recent output_log file
+   * Find the most recent VRChat log file in the log directory.
+   *
+   * Searches for files matching output_log*.txt pattern, sorts by modification time,
+   * and returns the newest one. VRChat creates timestamped log files on each launch.
+   *
+   * @returns Full path to most recent log file, or null if none found
    */
   private findLatestLogFile(): string | null {
     if (!this.logDirectory) return null;
@@ -126,7 +192,12 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Handle new file added to directory
+   * Handle new log file detected by chokidar watcher.
+   *
+   * Filters for output_log*.txt files and switches to the new file if it's
+   * newer than the current log file being monitored.
+   *
+   * @param filePath - Full path to newly detected file
    */
   private handleFileAdd(filePath: string): void {
     if (!/output_log.*\.txt$/i.test(path.basename(filePath))) {
@@ -135,7 +206,6 @@ export class LogWatcher extends EventEmitter {
 
     this.logger.debug(`New log file detected: ${filePath}`);
 
-    // Check if this is newer than current log
     const currentFile = this.currentLogFile;
     if (!currentFile || this.isNewerFile(filePath, currentFile)) {
       this.logger.info(`Switching to new log file: ${filePath}`);
@@ -145,7 +215,10 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Start periodic rotation check timer
+   * Start periodic log rotation check timer.
+   *
+   * Creates interval that checks for new log files every 60 seconds.
+   * This catches cases where chokidar misses file creation events.
    */
   private startRotationCheck(): void {
     this.rotationCheckTimer = setInterval(() => {
@@ -156,13 +229,16 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Periodically check if a newer log file exists
+   * Check for log file rotation and switch to newest file if necessary.
+   *
+   * Called periodically by rotation check timer. Handles two cases:
+   * 1. New log file created (VRChat restart)
+   * 2. Current log file deleted or moved
    */
   private checkForLogRotation(): void {
     try {
       const latestFile = this.findLatestLogFile();
 
-      // If we found a newer file, switch to it
       if (latestFile && latestFile !== this.currentLogFile) {
         if (!this.currentLogFile || this.isNewerFile(latestFile, this.currentLogFile)) {
           this.logger.info(`Log rotation detected! Switching to: ${latestFile}`);
@@ -171,7 +247,6 @@ export class LogWatcher extends EventEmitter {
         }
       }
 
-      // Also check if current file still exists
       if (this.currentLogFile && !fs.existsSync(this.currentLogFile)) {
         this.logger.warn(`Current log file no longer exists: ${this.currentLogFile}`);
         this.currentLogFile = latestFile;
@@ -186,49 +261,54 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Handle file change (new content written)
+   * Handle file change event from chokidar watcher.
+   *
+   * Triggered when new content is written to a log file. Only processes
+   * changes to the currently monitored log file.
+   *
+   * @param filePath - Path to changed file
    */
   private handleFileChange(filePath: string): void {
     if (!/output_log.*\.txt$/i.test(path.basename(filePath))) {
       return;
     }
 
-    // Only process the current log file
     if (this.currentLogFile && filePath === this.currentLogFile) {
       this.processNewContent(filePath);
     }
   }
 
   /**
-   * Process new content from log file
+   * Process new content added to the log file since last read.
+   *
+   * Reads content from lastPosition to current file size, splits into lines,
+   * and processes each line for player events. Handles file truncation and
+   * disappearance gracefully.
+   *
+   * @param filePath - Path to log file to process
    */
   private processNewContent(filePath: string): void {
     try {
-      // Check if file still exists before processing
       if (!fs.existsSync(filePath)) {
         this.logger.warn(`Log file disappeared: ${filePath}`);
-        this.checkForLogRotation(); // Immediately check for rotation
+        this.checkForLogRotation();
         return;
       }
 
       const currentSize = this.getFileSize(filePath);
 
-      // File was truncated or reset
       if (currentSize < this.lastPosition) {
         this.logger.debug('Log file was reset or truncated');
         this.lastPosition = 0;
       }
 
-      // No new content
       if (currentSize === this.lastPosition) {
         return;
       }
 
-      // Read new content
       const newContent = this.readFileChunk(filePath, this.lastPosition, currentSize);
       this.lastPosition = currentSize;
 
-      // Process lines
       const lines = newContent.split(/\r?\n/);
       for (const line of lines) {
         if (line.trim()) {
@@ -237,17 +317,20 @@ export class LogWatcher extends EventEmitter {
       }
     } catch (error) {
       this.logger.error('Error processing new log content', { error, filePath });
-      // On error, trigger rotation check in case file was rotated
       this.checkForLogRotation();
     }
   }
 
   /**
-   * Process a single log line
+   * Process a single log line and check for player events.
+   *
+   * Tests line against JOIN_PATTERN and LEAVE_PATTERN regex, extracts
+   * player information, and emits appropriate events.
+   *
+   * @param line - Single line from VRChat log file
    */
   private processLogLine(line: string): void {
     try {
-      // Check for player join
       const joinMatch = line.match(this.JOIN_PATTERN);
       if (joinMatch) {
         const [, displayName, userId] = joinMatch;
@@ -255,7 +338,6 @@ export class LogWatcher extends EventEmitter {
         return;
       }
 
-      // Check for player leave
       const leaveMatch = line.match(this.LEAVE_PATTERN);
       if (leaveMatch) {
         const [, displayName, userId] = leaveMatch;
@@ -268,7 +350,13 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Handle player join event
+   * Handle player join event and emit to monitoring system.
+   *
+   * Creates PlayerJoinEvent object and emits 'playerJoin' event for
+   * downstream processing by VRChatMonitor.
+   *
+   * @param userId - VRChat user ID (usr_xxx format)
+   * @param displayName - Player's display name
    */
   private handlePlayerJoin(userId: string, displayName: string): void {
     this.logger.debug(`Player joined: ${displayName} (${userId})`);
@@ -283,7 +371,13 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Handle player leave event
+   * Handle player leave event and emit to monitoring system.
+   *
+   * Creates PlayerLeaveEvent object and emits 'playerLeave' event for
+   * downstream processing.
+   *
+   * @param userId - VRChat user ID (usr_xxx format)
+   * @param displayName - Player's display name
    */
   private handlePlayerLeave(userId: string, displayName: string): void {
     this.logger.debug(`Player left: ${displayName} (${userId})`);
@@ -298,7 +392,11 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Handle watcher errors
+   * Handle file watcher errors and propagate to monitoring system.
+   *
+   * Logs error and emits 'error' event for upstream handling.
+   *
+   * @param error - Error object from chokidar watcher
    */
   private handleError(error: Error): void {
     this.logger.error('LogWatcher error', { error });
@@ -306,7 +404,10 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Get file size
+   * Get the current size of a file in bytes.
+   *
+   * @param filePath - Path to file
+   * @returns File size in bytes, or 0 if file doesn't exist
    */
   private getFileSize(filePath: string): number {
     try {
@@ -318,7 +419,15 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Read chunk of file
+   * Read a specific byte range from a file.
+   *
+   * Used for reading only new content without re-parsing entire log file.
+   * Properly handles file descriptor cleanup in all cases.
+   *
+   * @param filePath - Path to file to read
+   * @param start - Starting byte position
+   * @param end - Ending byte position
+   * @returns UTF-8 decoded file content from specified range
    */
   private readFileChunk(filePath: string, start: number, end: number): string {
     let fd: number | null = null;
@@ -339,7 +448,14 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Check if file is newer based on modification time
+   * Compare two files to determine which is newer.
+   *
+   * Uses file modification time (mtime) for comparison. Used during
+   * log rotation to identify the newest log file.
+   *
+   * @param fileA - First file path
+   * @param fileB - Second file path
+   * @returns True if fileA is newer than fileB, false otherwise
    */
   private isNewerFile(fileA: string, fileB: string): boolean {
     try {
@@ -352,14 +468,18 @@ export class LogWatcher extends EventEmitter {
   }
 
   /**
-   * Get current log file path
+   * Get the path to the currently monitored log file.
+   *
+   * @returns Full path to current log file, or null if none
    */
   public getCurrentLogFile(): string | null {
     return this.currentLogFile;
   }
 
   /**
-   * Check if watching
+   * Check if log watcher is currently active and monitoring.
+   *
+   * @returns True if watcher is running, false otherwise
    */
   public isActive(): boolean {
     return this.isWatching;
