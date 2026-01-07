@@ -55,4 +55,17 @@ export interface LoggingConfig {
 export interface AdvancedConfig {
   cacheDir?: string;
   deduplicateWindow: number;
+  trustRankAlerts?: TrustRankAlertsConfig;
+  ageVerificationAlerts?: AgeVerificationAlertsConfig;
+}
+
+export type TrustRank = 'unknown' | 'nuisance' | 'visitor' | 'new_user' | 'user' | 'known_user' | 'trusted_user' | 'veteran_user';
+
+export interface TrustRankAlertsConfig {
+  enabled: boolean;
+  minimumRank: TrustRank; // Alert if rank is BELOW this level
+}
+
+export interface AgeVerificationAlertsConfig {
+  enabled: boolean; // Show informational alert for age-verified users
 }

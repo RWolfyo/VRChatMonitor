@@ -216,6 +216,13 @@ export class ConfigManager {
       advanced: {
         cacheDir: config.advanced?.cacheDir || '',
         deduplicateWindow: deduplicateWindow,
+        trustRankAlerts: {
+          enabled: config.advanced?.trustRankAlerts?.enabled ?? true,
+          minimumRank: config.advanced?.trustRankAlerts?.minimumRank || 'new_user', // Warn for visitor by default
+        },
+        ageVerificationAlerts: {
+          enabled: config.advanced?.ageVerificationAlerts?.enabled ?? true,
+        },
       },
     };
   }
