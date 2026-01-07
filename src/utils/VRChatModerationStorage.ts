@@ -1,31 +1,85 @@
+/**
+ * VRChat Local Player Moderation Storage Manager
+ *
+ * Manages VRChat's LocalPlayerModerations system for automatic avatar visibility control.
+ * Directly reads and writes VRChat's local storage files to apply show/hide settings
+ * that take effect immediately when VRChat reads them.
+ *
+ * Features:
+ * - Direct file system integration with VRChat's AppData storage
+ * - Per-user moderation persistence (survives VRChat restarts)
+ * - Three moderation states: Default, HideAvatar, ShowAvatar
+ * - Automatic directory creation if missing
+ * - Cross-platform path detection (Windows primary)
+ *
+ * Storage Format:
+ * VRChat stores moderations in: AppData\LocalLow\VRChat\VRChat\LocalPlayerModerations\
+ * File naming: {currentUserId}-show-hide-user.vrcset
+ * Entry format: "{userId padded to 64 chars}{type as 3-digit number}\n"
+ *
+ * Integration:
+ * - Used by AvatarScannerService for autoHideAvatar feature
+ * - Used by BlocklistManager for autoHideBlacklisted feature
+ * - Changes apply immediately without VRChat restart
+ *
+ * Security:
+ * - Only modifies current user's own moderation file
+ * - Validates paths before file operations
+ * - Graceful degradation if VRChat path not found
+ *
+ * @see https://docs.vrchat.com/docs/local-vrchat-storage
+ */
+
 import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from './Logger';
 
 /**
- * VRChat Local Player Moderation Types
- * As of October 2022, showAvatar/hideAvatar are stored locally
- * Reference: https://docs.vrchat.com/docs/local-vrchat-storage
+ * VRChat local player moderation types.
+ *
+ * These values are written directly to VRChat's storage and control
+ * avatar visibility behavior on a per-user basis.
  */
 export enum VRChatModerationType {
-  Default = 0,      // No moderation (use default setting)
-  HideAvatar = 4,   // Hide user's avatar (show fallback)
-  ShowAvatar = 5,   // Force show user's avatar
+  /** No moderation applied - use global avatar display setting */
+  Default = 0,
+
+  /** Hide this user's avatar - show fallback avatar instead */
+  HideAvatar = 4,
+
+  /** Force show this user's avatar - override safety settings */
+  ShowAvatar = 5,
 }
 
 /**
- * Manages VRChat local player moderation storage
- * Handles reading/writing avatar show/hide preferences to VRChat's local storage
+ * VRChat Local Player Moderation Storage Manager.
+ *
+ * Provides programmatic access to VRChat's local avatar moderation system,
+ * allowing automatic hiding/showing of specific users' avatars based on
+ * performance criteria or blocklist matches.
  */
 export class VRChatModerationStorage {
+  /** Path to VRChat's AppData\LocalLow\VRChat\VRChat directory */
   private vrchatDataPath: string | null = null;
+
+  /** Current authenticated VRChat user ID (used for file naming) */
   private currentUserId: string | null = null;
 
+  /**
+   * Create a new VRChat moderation storage manager.
+   *
+   * @param logger - Logger instance for debug/error messages
+   */
   constructor(private logger: Logger) {}
 
   /**
-   * Initialize the moderation storage with current user ID
-   * @param currentUserId The authenticated VRChat user ID
+   * Initialize the moderation storage system.
+   *
+   * Detects VRChat's data path, validates access, and ensures the
+   * LocalPlayerModerations directory exists. Must be called after
+   * VRChat authentication before using other methods.
+   *
+   * @param currentUserId - Authenticated VRChat user ID (usr_xxx format)
    */
   public initialize(currentUserId: string): void {
     this.currentUserId = currentUserId;
@@ -51,8 +105,12 @@ export class VRChatModerationStorage {
   }
 
   /**
-   * Detect VRChat's local data path
-   * @returns Path to VRChat data directory or null if not found
+   * Auto-detect VRChat's local storage directory.
+   *
+   * Searches for AppData\LocalLow\VRChat\VRChat using environment variables.
+   * This is where VRChat stores configuration, logs, and moderation files.
+   *
+   * @returns Full path to VRChat data directory, or null if not found
    */
   private detectVRChatDataPath(): string | null {
     // VRChat stores data in AppData\LocalLow\VRChat\VRChat
@@ -76,8 +134,12 @@ export class VRChatModerationStorage {
   }
 
   /**
-   * Get the moderation file path for current user
-   * @returns Moderation file path or null if not initialized
+   * Get the full path to the current user's moderation file.
+   *
+   * VRChat uses separate moderation files per user account to isolate settings.
+   * File format: {currentUserId}-show-hide-user.vrcset
+   *
+   * @returns Full path to moderation file, or null if not initialized
    */
   private getModerationFilePath(): string | null {
     if (!this.vrchatDataPath || !this.currentUserId) {
@@ -92,8 +154,13 @@ export class VRChatModerationStorage {
   }
 
   /**
-   * Read all moderations from VRChat storage
-   * @returns Map of userId to moderation type
+   * Read all avatar moderations from VRChat's storage file.
+   *
+   * Parses the .vrcset file to extract all user moderation settings.
+   * Each line contains a user ID (padded to 64 chars) followed by a
+   * 3-digit moderation type code.
+   *
+   * @returns Map of user IDs to their moderation types
    */
   public getAllModerations(): Map<string, VRChatModerationType> {
     const filePath = this.getModerationFilePath();
@@ -131,9 +198,10 @@ export class VRChatModerationStorage {
   }
 
   /**
-   * Get moderation type for a specific user
-   * @param userId User ID to check
-   * @returns Moderation type or Default if not found
+   * Get the current moderation setting for a specific user.
+   *
+   * @param userId - VRChat user ID to check (usr_xxx format)
+   * @returns Moderation type (Default if no moderation set)
    */
   public getUserModeration(userId: string): VRChatModerationType {
     const moderations = this.getAllModerations();
@@ -141,10 +209,15 @@ export class VRChatModerationStorage {
   }
 
   /**
-   * Set moderation type for a user
-   * @param userId User ID to moderate
-   * @param type Moderation type to apply
-   * @returns Success status
+   * Set avatar moderation for a specific user.
+   *
+   * Reads the current moderation file, removes any existing entry for this user,
+   * adds the new moderation (if not Default), and writes back to disk. VRChat
+   * reads this file on startup and when entering instances.
+   *
+   * @param userId - VRChat user ID to moderate (usr_xxx format)
+   * @param type - Moderation type to apply (Default removes the entry)
+   * @returns True if successful, false if storage not initialized or write failed
    */
   public setUserModeration(userId: string, type: VRChatModerationType): boolean {
     const filePath = this.getModerationFilePath();
@@ -187,35 +260,48 @@ export class VRChatModerationStorage {
   }
 
   /**
-   * Hide a user's avatar
-   * @param userId User ID to hide
-   * @returns Success status
+   * Hide a user's avatar (show fallback instead).
+   *
+   * Convenience method for `setUserModeration(userId, HideAvatar)`.
+   * Used by auto-hide features for performance violations and blocklist matches.
+   *
+   * @param userId - VRChat user ID to hide
+   * @returns True if successful, false if failed
    */
   public hideAvatar(userId: string): boolean {
     return this.setUserModeration(userId, VRChatModerationType.HideAvatar);
   }
 
   /**
-   * Show a user's avatar (force show)
-   * @param userId User ID to show
-   * @returns Success status
+   * Force show a user's avatar (override safety settings).
+   *
+   * Convenience method for `setUserModeration(userId, ShowAvatar)`.
+   * Use cautiously - bypasses VRChat's safety systems.
+   *
+   * @param userId - VRChat user ID to force show
+   * @returns True if successful, false if failed
    */
   public showAvatar(userId: string): boolean {
     return this.setUserModeration(userId, VRChatModerationType.ShowAvatar);
   }
 
   /**
-   * Remove moderation for a user (revert to default)
-   * @param userId User ID to reset
-   * @returns Success status
+   * Remove moderation for a user (revert to global settings).
+   *
+   * Convenience method for `setUserModeration(userId, Default)`.
+   * Deletes the moderation entry from the file.
+   *
+   * @param userId - VRChat user ID to reset
+   * @returns True if successful, false if failed
    */
   public clearModeration(userId: string): boolean {
     return this.setUserModeration(userId, VRChatModerationType.Default);
   }
 
   /**
-   * Check if storage is properly initialized
-   * @returns True if ready to use
+   * Check if the storage system is properly initialized and ready to use.
+   *
+   * @returns True if VRChat path detected and user ID set, false otherwise
    */
   public isInitialized(): boolean {
     return this.vrchatDataPath !== null && this.currentUserId !== null;

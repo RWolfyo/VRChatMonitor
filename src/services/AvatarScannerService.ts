@@ -1,60 +1,161 @@
+/**
+ * Avatar Performance Scanner Service
+ *
+ * Monitors VRChat avatar performance metrics and alerts when users join with
+ * avatars that exceed configured performance thresholds.
+ *
+ * Features:
+ * - Fetches avatar data from VRChat API with intelligent caching
+ * - Checks 15+ performance metrics against user-defined thresholds
+ * - Two data sources: Basic avatar info (always available) + FileAnalysis (permission-based)
+ * - Time-based cache prevents excessive API calls
+ * - Supports null thresholds for selective checking
+ *
+ * Data Flow:
+ * 1. User joins instance → Get user profile for currentAvatar ID
+ * 2. Check cache for avatar data (60min default TTL)
+ * 3. If not cached: Fetch from VRChat API (getAvatar + getFileAnalysis)
+ * 4. Compare metrics against configured thresholds
+ * 5. Return violations for alert generation
+ *
+ * Performance Considerations:
+ * - Caching dramatically reduces API load (same avatar seen = 1 API call per hour)
+ * - FileAnalysis may not be available for all avatars (permission-based)
+ * - Performance rating always available, detailed stats sometimes missing
+ *
+ * @see AvatarScanningConfig in types/config.ts for configuration options
+ */
+
 import type { VRChatAPIService } from './VRChatAPIService';
 import type { Logger } from '../utils/Logger';
 import type { AvatarThresholds } from '../types/config';
 import { MINUTES_TO_MS, AVATAR_PERFORMANCE_RATING_ORDER } from '../constants';
 
+/**
+ * Complete avatar data with performance metrics.
+ *
+ * Contains all information needed for threshold checking and alerts.
+ * Stats may be partially available depending on API permissions.
+ */
 export interface AvatarData {
+  /** Unique avatar ID from VRChat */
   avatarId: string;
+
+  /** Avatar display name */
   avatarName: string;
+
+  /** Author/creator username */
   authorName: string;
+
+  /** VRChat performance rating (Excellent/Good/Medium/Poor/VeryPoor) */
   performanceRating?: string;
+
+  /** Detailed performance statistics (may be unavailable for some avatars) */
   stats?: AvatarStats;
+
+  /** Thumbnail image URL */
   thumbnailUrl?: string;
-  fetchedAt: number; // Timestamp when data was fetched
+
+  /** Timestamp when this data was fetched (for cache expiry) */
+  fetchedAt: number;
 }
 
+/**
+ * Detailed avatar performance statistics.
+ *
+ * Sourced from VRChat API FileAnalysis endpoint.
+ * All fields are optional - availability depends on:
+ * - Avatar upload permissions
+ * - API access level
+ * - Avatar platform (PC vs Quest)
+ */
 export interface AvatarStats {
-  // Polygon/Triangle counts
+  /** Total triangle/polygon count */
   totalPolygons?: number;
+
+  /** Total vertex count */
   totalVertices?: number;
 
-  // Particle systems
+  /** Number of particle systems on avatar */
   particleSystemCount?: number;
+
+  /** Maximum particles across all systems */
   totalMaxParticles?: number;
+
+  /** Whether any particle system has collision enabled */
   particleCollisionEnabled?: boolean;
+
+  /** Whether any particle system uses trails */
   particleTrailsEnabled?: boolean;
 
-  // Physics/Bones
+  /** Number of bones in skeleton */
   boneCount?: number;
+
+  /** Number of PhysBones components */
   physBoneComponentCount?: number;
+
+  /** Number of PhysBones colliders */
   physBoneColliderCount?: number;
+
+  /** Number of transforms affected by PhysBones */
   physBoneTransformCount?: number;
 
-  // Rendering
+  /** Number of unique materials */
   materialCount?: number;
+
+  /** Number of mesh renderers */
   meshCount?: number;
+
+  /** Number of realtime lights */
   lightCount?: number;
 
-  // Audio
+  /** Number of audio sources */
   audioSourceCount?: number;
 
-  // File size (in bytes, convert to MB when needed)
+  /** Compressed file size in bytes (convert to MB: / 1048576) */
   fileSize?: number;
+
+  /** Uncompressed memory size in bytes */
   uncompressedSize?: number;
+
+  /** Total texture memory usage in bytes */
   totalTextureUsage?: number;
 }
 
+/**
+ * Represents a single threshold violation.
+ *
+ * Generated when avatar exceeds configured performance thresholds.
+ * Used for alert generation and logging.
+ */
 export interface AvatarViolation {
+  /** Human-readable field name (e.g., "Total Polygons") */
   field: string;
+
+  /** Actual value from avatar */
   value: number | boolean | string;
+
+  /** Configured threshold that was exceeded */
   threshold: number | boolean | string;
+
+  /** Severity level for alert priority */
   severity: 'low' | 'medium' | 'high';
 }
 
 export class AvatarScannerService {
+  /** In-memory cache mapping avatar IDs to avatar data */
   private cache: Map<string, AvatarData> = new Map();
+
+  /** Cache expiry time in milliseconds */
   private cacheExpiryMs: number;
 
+  /**
+   * Initialize the Avatar Scanner Service.
+   *
+   * @param vrchatAPI - VRChat API service for fetching avatar data
+   * @param logger - Logger instance for debug/error logging
+   * @param cacheExpiryMinutes - How long to cache avatar data (default: 60 minutes)
+   */
   constructor(
     private vrchatAPI: VRChatAPIService,
     private logger: Logger,
@@ -64,10 +165,15 @@ export class AvatarScannerService {
   }
 
   /**
-   * Get avatar data for a user, with caching
-   * @param userId The user ID to get avatar for
-   * @param displayName The user's display name (for logging)
-   * @returns Avatar data if available, null if not found or error
+   * Get avatar data for a user with intelligent caching.
+   *
+   * Retrieves the user's current avatar from their profile, checks cache for recent data,
+   * and fetches from VRChat API if needed. Dramatically reduces API calls for avatars
+   * seen multiple times within the cache window.
+   *
+   * @param userId - VRChat user ID (usr_xxx format)
+   * @param displayName - User's display name for logging purposes
+   * @returns Avatar data with performance metrics, or null if unavailable/error
    */
   public async getAvatarForUser(userId: string, displayName: string): Promise<AvatarData | null> {
     try {
@@ -105,9 +211,14 @@ export class AvatarScannerService {
   }
 
   /**
-   * Fetch detailed avatar data from VRChat API
-   * @param avatarId The avatar ID to fetch
-   * @returns Avatar data with performance stats
+   * Fetch detailed avatar data from VRChat API.
+   *
+   * Retrieves basic avatar information (name, author, thumbnail, performance rating)
+   * and attempts to fetch detailed performance statistics if available. Some stats
+   * may be unavailable depending on avatar permissions and upload settings.
+   *
+   * @param avatarId - VRChat avatar ID (avtr_xxx format)
+   * @returns Complete avatar data including stats if available, or null if not found
    */
   private async fetchAvatarData(avatarId: string): Promise<AvatarData | null> {
     try {
@@ -152,8 +263,14 @@ export class AvatarScannerService {
   }
 
   /**
-   * Try to fetch detailed avatar stats from FileAnalysis endpoint
-   * This may not always be available depending on avatar permissions
+   * Attempt to fetch detailed performance statistics from VRChat FileAnalysis API.
+   *
+   * This data provides comprehensive metrics (polygons, PhysBones, particles, etc.) but
+   * requires the avatar's file ID and may not be accessible for all avatars. Expected
+   * to fail gracefully for avatars you don't own or have limited permissions to view.
+   *
+   * @param avatar - Raw avatar object from VRChat API (contains unityPackages)
+   * @returns Detailed performance stats if available, null if unavailable or permission denied
    */
   private async tryFetchAvatarStats(avatar: any): Promise<AvatarStats | null> {
     try {
@@ -211,8 +328,14 @@ export class AvatarScannerService {
   }
 
   /**
-   * Extract performance rating from avatar data
-   * Returns the Windows platform rating if available
+   * Extract VRChat performance rating from avatar data.
+   *
+   * Prioritizes Windows (standalonewindows) platform rating, falls back to
+   * Android or iOS ratings if Windows unavailable. Performance ratings indicate
+   * overall avatar optimization level (Excellent, Good, Medium, Poor, VeryPoor).
+   *
+   * @param avatar - Raw avatar object from VRChat API
+   * @returns Performance rating string, or undefined if not available
    */
   private extractPerformanceRating(avatar: any): string | undefined {
     if (!avatar.performance) return undefined;
@@ -227,10 +350,18 @@ export class AvatarScannerService {
   }
 
   /**
-   * Check avatar against configured thresholds
-   * @param avatarData The avatar data to check
-   * @param thresholds The configured thresholds
-   * @returns Array of violations found
+   * Check avatar performance metrics against configured thresholds.
+   *
+   * Compares all available avatar statistics with user-defined limits and generates
+   * violation reports for metrics that exceed thresholds. Handles three types of checks:
+   * - Numeric thresholds (polygons, particles, bones, etc.)
+   * - File size thresholds (converts bytes to MB for comparison)
+   * - Boolean flags (particle collision/trails enabled)
+   * - Performance rating comparison (hierarchy-based)
+   *
+   * @param avatarData - Complete avatar data with stats
+   * @param thresholds - User-configured performance limits
+   * @returns Array of threshold violations (empty if avatar passes all checks)
    */
   public checkAvatarThresholds(avatarData: AvatarData, thresholds: AvatarThresholds): AvatarViolation[] {
     const violations: AvatarViolation[] = [];
@@ -347,7 +478,10 @@ export class AvatarScannerService {
   }
 
   /**
-   * Clear expired entries from cache
+   * Remove expired entries from cache to prevent unbounded memory growth.
+   *
+   * Scans cache for entries older than the configured expiry time and removes them.
+   * Should be called periodically (e.g., every hour) to maintain reasonable memory usage.
    */
   public pruneCache(): void {
     const now = Date.now();
@@ -366,7 +500,10 @@ export class AvatarScannerService {
   }
 
   /**
-   * Clear all cache
+   * Clear entire avatar cache immediately.
+   *
+   * Removes all cached avatar data, forcing fresh API fetches on next requests.
+   * Useful for testing or when cache may contain stale data.
    */
   public clearCache(): void {
     const size = this.cache.size;
@@ -375,7 +512,9 @@ export class AvatarScannerService {
   }
 
   /**
-   * Get cache statistics
+   * Get current cache statistics for monitoring and debugging.
+   *
+   * @returns Object containing cache size (entries) and expiry time (minutes)
    */
   public getCacheStats(): { size: number; expiryMinutes: number } {
     return {
