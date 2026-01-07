@@ -418,6 +418,14 @@ export class VRChatAPIService {
   }
 
   /**
+   * Get cached current user (synchronous, no API call)
+   * @returns Current user object or null if not authenticated
+   */
+  public getCurrentUserCached(): any | null {
+    return this.currentUser;
+  }
+
+  /**
    * Get user groups (with caching)
    */
   public async getUserGroups(userId: string): Promise<any[]> {
@@ -508,6 +516,109 @@ export class VRChatAPIService {
         this.logger.error(`Failed to fetch profile for user: ${userId}`, { error });
         // Throw error instead of returning null - caller must handle
         throw error;
+      }
+    });
+  }
+
+  /**
+   * Get avatar information by ID
+   */
+  public async getAvatar(avatarId: string): Promise<any | null> {
+    if (!this.client) {
+      throw new Error('VRChat client not initialized. Call authenticate() first.');
+    }
+
+    // Check cache first
+    const cacheKey = `avatar:${avatarId}`;
+    const cached = this.getFromCache<any>(cacheKey);
+    if (cached) {
+      this.logger.debug(`Cache hit for avatar: ${avatarId}`);
+      return cached;
+    }
+
+    // Queue the API call with rate limiting
+    return this.queueApiCall(async () => {
+      try {
+        this.logger.debug(`Fetching avatar: ${avatarId}`);
+        this.logger.verbose('API Request: getAvatar', { avatarId });
+
+        const response = await (this.client as any).getAvatar({ path: { avatarId } });
+
+        this.logger.verbose('API Response: getAvatar', {
+          avatarId,
+          success: !response.error,
+          avatar: response.data,
+          error: response.error
+        });
+
+        if (response.error) {
+          throw new Error(response.error.message);
+        }
+
+        const avatar = response.data;
+        this.setCache(cacheKey, avatar);
+
+        return avatar;
+      } catch (error) {
+        this.logger.error(`Failed to fetch avatar: ${avatarId}`, { error });
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Get file analysis (performance stats) for an avatar
+   * This may fail for avatars you don't own or don't have permission to see
+   */
+  public async getFileAnalysis(fileId: string, versionId: number | string): Promise<any | null> {
+    if (!this.client) {
+      throw new Error('VRChat client not initialized. Call authenticate() first.');
+    }
+
+    // Check cache first
+    const cacheKey = `file_analysis:${fileId}:${versionId}`;
+    const cached = this.getFromCache<any>(cacheKey);
+    if (cached) {
+      this.logger.debug(`Cache hit for file analysis: ${fileId}/${versionId}`);
+      return cached;
+    }
+
+    // Queue the API call with rate limiting
+    return this.queueApiCall(async () => {
+      try {
+        this.logger.debug(`Fetching file analysis: ${fileId}/${versionId}`);
+        this.logger.verbose('API Request: getFileAnalysis', { fileId, versionId });
+
+        const response = await (this.client as any).getFileAnalysis({
+          path: { fileId, versionId: String(versionId) }
+        });
+
+        this.logger.verbose('API Response: getFileAnalysis', {
+          fileId,
+          versionId,
+          success: !response.error,
+          analysis: response.data,
+          error: response.error
+        });
+
+        if (response.error) {
+          // 202 = Analysis not yet available
+          // 404 = File not found or no permission
+          if (response.error.status === 202) {
+            this.logger.debug(`File analysis not yet available for ${fileId}/${versionId}`);
+            return null;
+          }
+          throw new Error(response.error.message);
+        }
+
+        const analysis = response.data;
+        this.setCache(cacheKey, analysis);
+
+        return analysis;
+      } catch (error) {
+        this.logger.debug(`Failed to fetch file analysis for ${fileId}/${versionId}: ${error}`);
+        // Return null instead of throwing - this is expected for non-owned avatars
+        return null;
       }
     });
   }

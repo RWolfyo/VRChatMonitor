@@ -75,7 +75,7 @@ export class ConfigManager {
    * Migrate config from older versions to current schema
    */
   private migrateConfig(config: Partial<Config>): Partial<Config> {
-    const CURRENT_CONFIG_VERSION = 2;
+    const CURRENT_CONFIG_VERSION = 3;
     const configVersion = config.version || 1;
 
     if (configVersion >= CURRENT_CONFIG_VERSION) {
@@ -88,9 +88,9 @@ export class ConfigManager {
     let migrated = { ...config };
     let migrationApplied = false;
 
-    // Migration v1 -> v2: Add obscenityFilter to blocklist
+    // Migration v1 -> v2: Add obscenityFilter, trustRankAlerts, and ageVerificationAlerts
     if (configVersion < 2) {
-      this.logger.info('Applying migration v1 -> v2: Adding obscenityFilter configuration');
+      this.logger.info('Applying migration v1 -> v2: Adding obscenityFilter, trustRankAlerts, and ageVerificationAlerts');
 
       // Add obscenityFilter if it doesn't exist
       if (!migrated.blocklist) {
@@ -102,6 +102,57 @@ export class ConfigManager {
         blocklistConfig.obscenityFilter = {
           enabled: true,
           severity: 'high',
+        };
+        migrationApplied = true;
+      }
+
+      // Add trustRankAlerts and ageVerificationAlerts to advanced config
+      if (!migrated.advanced) {
+        migrated.advanced = {} as any;
+      }
+
+      const advancedConfig = migrated.advanced as any;
+      if (!advancedConfig.trustRankAlerts) {
+        advancedConfig.trustRankAlerts = {
+          enabled: true,
+          minimumRank: 'new_user',
+        };
+        migrationApplied = true;
+      }
+
+      if (!advancedConfig.ageVerificationAlerts) {
+        advancedConfig.ageVerificationAlerts = {
+          enabled: true,
+        };
+        migrationApplied = true;
+      }
+    }
+
+    // Migration v2 -> v3: Add avatarScanning to advanced
+    if (configVersion < 3) {
+      this.logger.info('Applying migration v2 -> v3: Adding avatarScanning configuration');
+
+      if (!migrated.advanced) {
+        migrated.advanced = {} as any;
+      }
+
+      const advancedConfig = migrated.advanced as any;
+      if (!advancedConfig.avatarScanning) {
+        advancedConfig.avatarScanning = {
+          enabled: true, // Enabled by default
+          scanOnJoin: true,
+          scanOnChange: true,
+          cacheExpiry: 60,
+          thresholds: {
+            totalPolygons: 70000,
+            particleSystemCount: 8,
+            totalMaxParticles: 10000,
+            boneCount: 400,
+            physBoneComponentCount: 32,
+            materialCount: 20,
+            lightCount: 0,
+            audioSourceCount: 8,
+          },
         };
         migrationApplied = true;
       }
@@ -117,7 +168,7 @@ export class ConfigManager {
         this.logger.info('Config migration completed and saved to file');
       } catch (error) {
         this.logger.warn('Failed to save migrated config to file', { error });
-        this.logger.warn('Please manually update your config.json to include the new "obscenityFilter" settings');
+        this.logger.warn('Please manually update your config.json to include the new configuration settings');
       }
     }
 
@@ -175,7 +226,7 @@ export class ConfigManager {
     }
 
     return {
-      version: config.version || 2, // Current config version
+      version: config.version || 3, // Current config version
       vrchat: {
         username: config.vrchat?.username || '',
         password: config.vrchat?.password || '',
@@ -222,6 +273,33 @@ export class ConfigManager {
         },
         ageVerificationAlerts: {
           enabled: config.advanced?.ageVerificationAlerts?.enabled ?? true,
+        },
+        avatarScanning: {
+          enabled: config.advanced?.avatarScanning?.enabled ?? true, // Enabled by default
+          scanOnJoin: config.advanced?.avatarScanning?.scanOnJoin ?? true,
+          scanOnChange: config.advanced?.avatarScanning?.scanOnChange ?? true, // Enabled by default
+          cacheExpiry: config.advanced?.avatarScanning?.cacheExpiry ?? 60,
+          autoHideAvatar: config.advanced?.avatarScanning?.autoHideAvatar ?? false, // Disabled by default
+          thresholds: {
+            totalPolygons: config.advanced?.avatarScanning?.thresholds?.totalPolygons ?? 70000,
+            totalVertices: config.advanced?.avatarScanning?.thresholds?.totalVertices,
+            particleSystemCount: config.advanced?.avatarScanning?.thresholds?.particleSystemCount ?? 8,
+            totalMaxParticles: config.advanced?.avatarScanning?.thresholds?.totalMaxParticles ?? 10000,
+            particleCollisionEnabled: config.advanced?.avatarScanning?.thresholds?.particleCollisionEnabled,
+            particleTrailsEnabled: config.advanced?.avatarScanning?.thresholds?.particleTrailsEnabled,
+            boneCount: config.advanced?.avatarScanning?.thresholds?.boneCount ?? 400,
+            physBoneComponentCount: config.advanced?.avatarScanning?.thresholds?.physBoneComponentCount ?? 32,
+            physBoneColliderCount: config.advanced?.avatarScanning?.thresholds?.physBoneColliderCount,
+            physBoneTransformCount: config.advanced?.avatarScanning?.thresholds?.physBoneTransformCount,
+            materialCount: config.advanced?.avatarScanning?.thresholds?.materialCount ?? 20,
+            meshCount: config.advanced?.avatarScanning?.thresholds?.meshCount,
+            lightCount: config.advanced?.avatarScanning?.thresholds?.lightCount ?? 0,
+            audioSourceCount: config.advanced?.avatarScanning?.thresholds?.audioSourceCount ?? 8,
+            fileSize: config.advanced?.avatarScanning?.thresholds?.fileSize,
+            uncompressedSize: config.advanced?.avatarScanning?.thresholds?.uncompressedSize,
+            totalTextureUsage: config.advanced?.avatarScanning?.thresholds?.totalTextureUsage,
+            performanceRating: config.advanced?.avatarScanning?.thresholds?.performanceRating,
+          },
         },
       },
     };

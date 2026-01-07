@@ -8,6 +8,7 @@ import { NotificationService } from '../services/NotificationService';
 import { AudioService } from '../services/AudioService';
 import { VRCXService } from '../services/VRCXService';
 import { AutoUpdateService } from '../services/AutoUpdateService';
+import { AvatarScannerService, AvatarData, AvatarViolation } from '../services/AvatarScannerService';
 import { LogWatcher } from './LogWatcher';
 import { BlocklistManager } from './BlocklistManager';
 import { PlayerJoinEvent } from '../types/events';
@@ -19,6 +20,7 @@ import {
   formatTrustRank,
   TRUST_RANK_DISPLAY_NAMES,
 } from '../utils/TrustRankUtils';
+import { VRChatModerationStorage } from '../utils/VRChatModerationStorage';
 
 export class VRChatMonitor extends EventEmitter {
   private logger: Logger;
@@ -32,6 +34,8 @@ export class VRChatMonitor extends EventEmitter {
   private autoUpdateService: AutoUpdateService;
   private logWatcher: LogWatcher | null = null;
   private blocklistManager: BlocklistManager | null = null;
+  private avatarScanner: AvatarScannerService | null = null;
+  private moderationStorage: VRChatModerationStorage | null = null;
 
   private isRunning: boolean = false;
   private recentJoins: Map<string, number> = new Map(); // userId -> timestamp
@@ -100,6 +104,9 @@ export class VRChatMonitor extends EventEmitter {
 
       // Initialize blocklist
       await this.initializeBlocklist();
+
+      // Initialize avatar scanner if enabled
+      await this.initializeAvatarScanner();
 
       // Initialize log watcher
       await this.initializeLogWatcher();
@@ -184,6 +191,14 @@ export class VRChatMonitor extends EventEmitter {
     );
 
     await this.vrchatAPI.authenticate();
+
+    // Initialize VRChat moderation storage for auto-hide feature
+    const currentUser = this.vrchatAPI.getCurrentUserCached();
+    if (currentUser) {
+      this.moderationStorage = new VRChatModerationStorage(this.logger);
+      this.moderationStorage.initialize(currentUser.id);
+      this.logger.debug('VRChat moderation storage initialized');
+    }
   }
 
   /**
@@ -233,6 +248,30 @@ export class VRChatMonitor extends EventEmitter {
 
     const stats = this.blocklistManager.getStats();
     this.logger.info('Blocklist loaded', stats);
+  }
+
+  /**
+   * Initialize avatar scanner
+   */
+  private async initializeAvatarScanner(): Promise<void> {
+    if (!this.vrchatAPI) {
+      throw new Error('VRChat API must be initialized before avatar scanner');
+    }
+
+    if (!this.config.advanced.avatarScanning?.enabled) {
+      this.logger.info('Avatar scanning is disabled');
+      return;
+    }
+
+    this.logger.info('Initializing avatar scanner...');
+
+    this.avatarScanner = new AvatarScannerService(
+      this.vrchatAPI,
+      this.logger,
+      this.config.advanced.avatarScanning.cacheExpiry
+    );
+
+    this.logger.info('Avatar scanner initialized successfully');
   }
 
   /**
@@ -310,6 +349,13 @@ export class VRChatMonitor extends EventEmitter {
     // Check trust rank and age verification (requires VRChat API)
     if (this.vrchatAPI) {
       await this.checkTrustRankAndAgeVerification(userId, displayName);
+    }
+
+    // Check avatar performance (requires VRChat API and avatar scanner)
+    if (this.vrchatAPI && this.avatarScanner && this.config.advanced.avatarScanning?.enabled) {
+      if (this.config.advanced.avatarScanning.scanOnJoin) {
+        await this.checkAvatarPerformance(userId, displayName);
+      }
     }
   }
 
@@ -533,6 +579,190 @@ export class VRChatMonitor extends EventEmitter {
       } catch (error) {
         this.logger.error('Failed to send age verification VRCX notification', { error });
       }
+    }
+  }
+
+  /**
+   * Check avatar performance and send alerts if thresholds exceeded
+   */
+  private async checkAvatarPerformance(userId: string, displayName: string): Promise<void> {
+    if (!this.avatarScanner || !this.config.advanced.avatarScanning) {
+      return;
+    }
+
+    try {
+      this.logger.debug(`Checking avatar performance for ${displayName} (${userId})`);
+
+      // Get avatar data (with caching)
+      const avatarData = await this.avatarScanner.getAvatarForUser(userId, displayName);
+      if (!avatarData) {
+        this.logger.debug(`No avatar data available for ${displayName}`);
+        return;
+      }
+
+      // Check against thresholds
+      const violations = this.avatarScanner.checkAvatarThresholds(
+        avatarData,
+        this.config.advanced.avatarScanning.thresholds
+      );
+
+      if (violations.length > 0) {
+        this.logger.info(`⚠️ User ${displayName} is wearing a performance-heavy avatar: ${violations.length} violations (${avatarData.avatarName})`);
+
+        // Auto-hide avatar if enabled (skip friends)
+        if (this.config.advanced.avatarScanning.autoHideAvatar && this.moderationStorage?.isInitialized()) {
+          await this.autoHideAvatar(userId, displayName);
+        }
+
+        await this.sendAvatarAlert(displayName, userId, avatarData, violations);
+      } else {
+        this.logger.debug(`User ${displayName}'s avatar performance is acceptable`);
+      }
+    } catch (error) {
+      this.logger.error(`Error checking avatar performance for ${displayName} (${userId})`, { error });
+    }
+  }
+
+  /**
+   * Send avatar performance alert notifications
+   */
+  private async sendAvatarAlert(
+    displayName: string,
+    userId: string,
+    avatarData: AvatarData,
+    violations: AvatarViolation[]
+  ): Promise<void> {
+    // Format violations summary
+    const violationsSummary = violations.slice(0, 3).map(v => {
+      if (typeof v.value === 'number' && typeof v.threshold === 'number') {
+        return `${v.field}: ${v.value.toLocaleString()} (limit: ${v.threshold.toLocaleString()})`;
+      }
+      return `${v.field}: ${v.value} (threshold: ${v.threshold})`;
+    }).join(', ');
+
+    const moreCount = violations.length > 3 ? ` +${violations.length - 3} more` : '';
+
+    // Desktop notification
+    if (this.config.notifications.desktop.enabled) {
+      try {
+        await this.notificationService.notify({
+          title: `⚠️ Performance Issue: ${displayName}`,
+          message: `User is wearing problematic avatar\nAvatar: ${avatarData.avatarName}\n${violationsSummary}${moreCount}`,
+          sound: true,
+        });
+      } catch (error) {
+        this.logger.error('Failed to send avatar performance desktop notification', { error });
+      }
+    }
+
+    // Audio alert for high severity violations
+    const hasHighSeverity = violations.some(v => v.severity === 'high');
+    if (this.config.audio.enabled && this.audioService.isAvailable() && hasHighSeverity) {
+      try {
+        await this.audioService.playAlert();
+      } catch (error) {
+        this.logger.error('Failed to play audio alert for avatar performance', { error });
+      }
+    }
+
+    // Discord notification
+    if (this.discordService) {
+      try {
+        // Determine embed color based on highest severity
+        const maxSeverity = violations.reduce((max, v) => {
+          if (v.severity === 'high') return 'high';
+          if (v.severity === 'medium' && max !== 'high') return 'medium';
+          return max;
+        }, 'low' as 'low' | 'medium' | 'high');
+
+        const embedColor = maxSeverity === 'high' ? 0xFF4500 : maxSeverity === 'medium' ? 0xFFA500 : 0xFFFF00;
+
+        const fields: Array<{ name: string; value: string; inline: boolean }> = [
+          {
+            name: 'User Wearing Problematic Avatar',
+            value: `**${displayName}**\n${userId}`,
+            inline: false,
+          },
+          {
+            name: 'Avatar Details',
+            value: `**Name:** ${avatarData.avatarName}\n**Author:** ${avatarData.authorName}${avatarData.performanceRating ? `\n**Rating:** ${avatarData.performanceRating}` : ''}`,
+            inline: false,
+          },
+        ];
+
+        fields.push({
+          name: `⚠️ Performance Violations (${violations.length})`,
+          value: violations.map((v) => {
+            const emoji = v.severity === 'high' ? '🔴' : v.severity === 'medium' ? '🟠' : '🟡';
+            let valueStr = '';
+            if (typeof v.value === 'number' && typeof v.threshold === 'number') {
+              valueStr = `${v.value.toLocaleString()} / ${v.threshold.toLocaleString()}`;
+            } else {
+              valueStr = `${v.value} (expected: ${v.threshold})`;
+            }
+            return `${emoji} **${v.field}**: ${valueStr}`;
+          }).slice(0, 10).join('\n') + (violations.length > 10 ? `\n... and ${violations.length - 10} more` : ''),
+          inline: false,
+        });
+
+        await this.discordService.sendEmbed({
+          title: `⚠️ User with Performance-Heavy Avatar Detected`,
+          description: `User **${displayName}** is wearing an avatar with ${violations.length} performance violation${violations.length !== 1 ? 's' : ''}`,
+          color: embedColor,
+          fields,
+        });
+      } catch (error) {
+        this.logger.error('Failed to send avatar performance Discord notification', { error });
+      }
+    }
+
+    // VRCX VR overlay notification
+    if (this.vrcxService && this.vrcxService.isEnabled()) {
+      try {
+        const severityEmoji = hasHighSeverity ? '🔴' : '⚠️';
+        await this.vrcxService.sendAlert(
+          `${severityEmoji} Performance Issue: ${displayName}`,
+          `User wearing heavy avatar: ${violations.length} violations`,
+          userId
+        );
+      } catch (error) {
+        this.logger.error('Failed to send avatar performance VRCX notification', { error });
+      }
+    }
+  }
+
+  /**
+   * Automatically hide user's avatar if they're not a friend
+   * Writes to VRChat's local player moderation storage
+   */
+  private async autoHideAvatar(userId: string, displayName: string): Promise<void> {
+    if (!this.vrchatAPI || !this.moderationStorage) {
+      return;
+    }
+
+    try {
+      // Check if user is a friend
+      const userProfile = await this.vrchatAPI.getUserProfile(userId);
+      if (!userProfile) {
+        this.logger.debug(`Could not get profile for ${displayName}, skipping auto-hide`);
+        return;
+      }
+
+      // Skip friends
+      if (userProfile.isFriend === true) {
+        this.logger.debug(`Skipping auto-hide for friend: ${displayName}`);
+        return;
+      }
+
+      // Hide avatar in VRChat local storage
+      const success = this.moderationStorage.hideAvatar(userId);
+      if (success) {
+        this.logger.info(`🙈 Auto-hidden avatar for user: ${displayName} (${userId})`);
+      } else {
+        this.logger.warn(`Failed to auto-hide avatar for ${displayName}`);
+      }
+    } catch (error) {
+      this.logger.error(`Error auto-hiding avatar for ${displayName}`, { error });
     }
   }
 

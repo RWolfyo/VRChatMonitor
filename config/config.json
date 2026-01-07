@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "vrchat": {
     "username": "",
     "password": ""
@@ -46,6 +46,33 @@
     },
     "ageVerificationAlerts": {
       "enabled": true
+    },
+    "avatarScanning": {
+      "enabled": true,
+      "scanOnJoin": true,
+      "scanOnChange": true,
+      "cacheExpiry": 60,
+      "autoHideAvatar": false,
+      "thresholds": {
+        "totalPolygons": 70000,
+        "totalVertices": null,
+        "particleSystemCount": 8,
+        "totalMaxParticles": 10000,
+        "particleCollisionEnabled": null,
+        "particleTrailsEnabled": null,
+        "boneCount": 400,
+        "physBoneComponentCount": 32,
+        "physBoneColliderCount": null,
+        "physBoneTransformCount": null,
+        "materialCount": 20,
+        "meshCount": null,
+        "lightCount": 0,
+        "audioSourceCount": 8,
+        "fileSize": null,
+        "uncompressedSize": null,
+        "totalTextureUsage": null,
+        "performanceRating": null
+      }
     }
   }
 }

@@ -404,6 +404,56 @@ export class CommandHandler {
       },
     });
 
+    // Avatar scanning command
+    this.registerCommand({
+      name: 'avatar-scan',
+      aliases: ['avatar', 'av-scan'],
+      description: 'Toggle avatar scanning (performance monitoring)',
+      usage: 'avatar-scan [on|off]',
+      handler: async (args) => {
+        if (args.length === 0) {
+          // Show current settings
+          const config = this.monitor['config'];
+          const avConfig = config.advanced.avatarScanning;
+          console.log();
+          console.log(chalk.white.bold('Avatar Scanning Settings:'));
+          console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
+          console.log();
+          console.log(`  Enabled: ${avConfig?.enabled ? chalk.green('✓ Yes') : chalk.red('✗ No')}`);
+          console.log(`  Scan on Join: ${avConfig?.scanOnJoin ? chalk.green('✓ Yes') : chalk.red('✗ No')}`);
+          console.log(`  Scan on Change: ${avConfig?.scanOnChange ? chalk.green('✓ Yes') : chalk.red('✗ No')}`);
+          console.log(`  Cache Expiry: ${chalk.cyan(avConfig?.cacheExpiry + ' minutes')}`);
+          console.log();
+          console.log(chalk.gray('Monitors avatar performance and alerts when thresholds are exceeded'));
+          console.log(chalk.gray('Usage: avatar-scan [on|off]'));
+          console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
+          console.log();
+          return;
+        }
+
+        const arg = args[0].toLowerCase();
+
+        if (arg === 'on' || arg === 'enable') {
+          this.monitor['configManager'].updateConfig('advanced.avatarScanning.enabled', true);
+          console.log();
+          console.log(chalk.green('✓ Avatar scanning enabled'));
+          console.log(chalk.yellow('⚠️  Note: Restart required for changes to take effect'));
+          console.log();
+        } else if (arg === 'off' || arg === 'disable') {
+          this.monitor['configManager'].updateConfig('advanced.avatarScanning.enabled', false);
+          console.log();
+          console.log(chalk.yellow('✓ Avatar scanning disabled'));
+          console.log(chalk.yellow('⚠️  Note: Restart required for changes to take effect'));
+          console.log();
+        } else {
+          console.log();
+          console.log(chalk.red(`❌ Invalid argument: ${arg}`));
+          console.log(chalk.gray('Usage: avatar-scan [on|off]'));
+          console.log();
+        }
+      },
+    });
+
     // Quit command
     this.registerCommand({
       name: 'quit',
