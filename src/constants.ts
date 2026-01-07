@@ -1,5 +1,5 @@
 /**
- * Application-wide constants for VRChat Monitor v2.3.0
+ * Application-wide constants for VRChat Monitor
  *
  * This file serves as the single source of truth for all configuration values,
  * timeouts, limits, and default settings throughout the application.
@@ -234,7 +234,7 @@ export const DEDUPE_CLEANUP_MULTIPLIER = 2;
 export const DEDUPE_MAP_MAX_SIZE = 10000;
 
 // ============================================================================
-// Avatar Scanning - Performance monitoring (v2.3.0)
+// Avatar Scanning - Performance monitoring
 // ============================================================================
 
 /**
