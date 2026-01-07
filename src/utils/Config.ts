@@ -274,6 +274,49 @@ export class ConfigManager {
   }
 
   /**
+   * Generic config update method
+   * Updates both in-memory config and persists to file
+   * @param path Dot-notation path to config field (e.g., 'advanced.trustRankAlerts.enabled')
+   * @param value New value for the field
+   */
+  public updateConfig(path: string, value: any): void {
+    if (!this.config) return;
+
+    try {
+      // Update in-memory config
+      const pathParts = path.split('.');
+      let current: any = this.config;
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        if (!(pathParts[i] in current)) {
+          current[pathParts[i]] = {};
+        }
+        current = current[pathParts[i]];
+      }
+      current[pathParts[pathParts.length - 1]] = value;
+
+      // Read and update config file
+      const currentContent = fs.readFileSync(this.configPath, 'utf-8');
+      const currentConfig = JSON.parse(currentContent);
+
+      // Update file config
+      let fileCurrent: any = currentConfig;
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        if (!(pathParts[i] in fileCurrent)) {
+          fileCurrent[pathParts[i]] = {};
+        }
+        fileCurrent = fileCurrent[pathParts[i]];
+      }
+      fileCurrent[pathParts[pathParts.length - 1]] = value;
+
+      fs.writeFileSync(this.configPath, JSON.stringify(currentConfig, null, 2), 'utf-8');
+      this.logger.info(`Configuration updated: ${path} = ${JSON.stringify(value)}`);
+    } catch (error) {
+      this.logger.warn(`Failed to save configuration for ${path}`, { error });
+      throw error;
+    }
+  }
+
+  /**
    * Get configuration value from environment variable override
    */
   public static getEnvOverride<T>(envVar: string, defaultValue: T): T {

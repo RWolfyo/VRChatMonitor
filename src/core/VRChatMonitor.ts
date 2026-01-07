@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { Logger } from '../utils/Logger';
 import { ConfigManager } from '../utils/Config';
-import { Config } from '../types/config';
+import { Config, TrustRank } from '../types/config';
 import { VRChatAPIService } from '../services/VRChatAPIService';
 import { DiscordService } from '../services/DiscordService';
 import { NotificationService } from '../services/NotificationService';
@@ -13,6 +13,12 @@ import { BlocklistManager } from './BlocklistManager';
 import { PlayerJoinEvent } from '../types/events';
 import { MatchResult } from '../types/blocklist';
 import { DEDUPE_CLEANUP_MULTIPLIER, DEDUPE_MAP_MAX_SIZE, SECONDS_TO_MS } from '../constants';
+import {
+  extractTrustRankFromTags,
+  isBelowMinimumRank,
+  formatTrustRank,
+  TRUST_RANK_DISPLAY_NAMES,
+} from '../utils/TrustRankUtils';
 
 export class VRChatMonitor extends EventEmitter {
   private logger: Logger;
@@ -300,6 +306,11 @@ export class VRChatMonitor extends EventEmitter {
     } catch (error) {
       this.logger.error(`Error checking user ${userId}`, { error });
     }
+
+    // Check trust rank and age verification (requires VRChat API)
+    if (this.vrchatAPI) {
+      await this.checkTrustRankAndAgeVerification(userId, displayName);
+    }
   }
 
   /**
@@ -353,6 +364,176 @@ export class VRChatMonitor extends EventEmitter {
 
     // Emit alert event
     this.emit('alert', result);
+  }
+
+  /**
+   * Check trust rank and age verification status
+   */
+  private async checkTrustRankAndAgeVerification(userId: string, displayName: string): Promise<void> {
+    const trustConfig = this.config.advanced.trustRankAlerts;
+    const ageConfig = this.config.advanced.ageVerificationAlerts;
+
+    // Skip if both features are disabled
+    if (!trustConfig?.enabled && !ageConfig?.enabled) {
+      return;
+    }
+
+    try {
+      // Fetch user profile to get tags and age verification status
+      const user = await this.vrchatAPI!.getUserProfile(userId);
+
+      if (!user) {
+        this.logger.warn(`Failed to fetch user profile for ${displayName} (${userId})`);
+        return;
+      }
+
+      // Extract trust rank from tags
+      const trustRank = extractTrustRankFromTags(user.tags);
+
+      // Check trust rank alerts
+      if (trustConfig?.enabled) {
+        const minimumRank = trustConfig.minimumRank || 'new_user';
+
+        // Alert if rank is below minimum (or if detection failed and rank is unknown)
+        if (trustRank === 'unknown' || isBelowMinimumRank(trustRank, minimumRank)) {
+          this.logger.warn(`⚠️ TRUST RANK ALERT: ${displayName} (${userId})`, {
+            trustRank,
+            displayName: TRUST_RANK_DISPLAY_NAMES[trustRank],
+            minimumRequired: TRUST_RANK_DISPLAY_NAMES[minimumRank],
+          });
+
+          await this.sendTrustRankAlert(displayName, userId, trustRank);
+        }
+      }
+
+      // Check age verification
+      if (ageConfig?.enabled && user.tags) {
+        // Age verified users have 'system_age_verified' or similar tags
+        // Also check the ageVerified field if available
+        const isAgeVerified = user.tags.includes('system_age_verified') ||
+                              (user as any).ageVerified === true;
+
+        if (isAgeVerified) {
+          this.logger.info(`ℹ️ AGE VERIFIED USER: ${displayName} (${userId})`);
+          await this.sendAgeVerificationAlert(displayName, userId);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Error checking trust rank/age verification for ${userId}`, { error });
+    }
+  }
+
+  /**
+   * Send trust rank alerts
+   */
+  private async sendTrustRankAlert(displayName: string, userId: string, trustRank: TrustRank): Promise<void> {
+    const formattedRank = formatTrustRank(trustRank, true);
+    const isNuisance = trustRank === 'nuisance';
+
+    // Desktop notification
+    if (this.config.notifications.desktop.enabled) {
+      try {
+        const message = isNuisance
+          ? `🚨 NUISANCE USER DETECTED - BAN ON SIGHT 🚨`
+          : `Trust Rank: ${formattedRank}`;
+        await this.notificationService.notifyBlockedUser(displayName, message);
+      } catch (error) {
+        this.logger.error('Failed to send trust rank desktop notification', { error });
+      }
+    }
+
+    // Audio alert (only for nuisance users by default, or any low trust)
+    if (this.config.audio.enabled && this.audioService.isAvailable() && (isNuisance || trustRank === 'visitor')) {
+      try {
+        await this.audioService.playAlert();
+      } catch (error) {
+        this.logger.error('Failed to play trust rank audio alert', { error });
+      }
+    }
+
+    // Discord notification
+    if (this.discordService) {
+      try {
+        const embedColor = isNuisance ? 0xFF0000 : (trustRank === 'visitor' ? 0xFFA500 : 0xFFFF00);
+        const description = isNuisance
+          ? `🚨 **NUISANCE USER DETECTED - BAN ON SIGHT** 🚨\n\nThis user has been de-ranked by VRChat for problematic behavior.`
+          : `User has low trust rank: **${formattedRank}**`;
+
+        await this.discordService.sendEmbed({
+          title: `Trust Rank Alert: ${displayName}`,
+          description,
+          color: embedColor,
+          fields: [
+            { name: 'User ID', value: userId, inline: true },
+            { name: 'Trust Rank', value: formattedRank, inline: true },
+          ],
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error) {
+        this.logger.error('Failed to send trust rank Discord notification', { error });
+      }
+    }
+
+    // VRCX VR overlay notification
+    if (this.vrcxService && this.vrcxService.isEnabled()) {
+      try {
+        const vrcxMessage = isNuisance
+          ? `🚨 NUISANCE USER: ${displayName} - BAN ON SIGHT`
+          : `${formattedRank}: ${displayName}`;
+        await this.vrcxService.sendAlert(vrcxMessage, 'Trust Rank Alert', userId);
+      } catch (error) {
+        this.logger.error('Failed to send trust rank VRCX notification', { error });
+      }
+    }
+  }
+
+  /**
+   * Send age verification informational alert
+   */
+  private async sendAgeVerificationAlert(displayName: string, userId: string): Promise<void> {
+    // Desktop notification
+    if (this.config.notifications.desktop.enabled) {
+      try {
+        await this.notificationService.notify({
+          title: 'Age Verified User',
+          message: `${displayName} is age verified (18+)`,
+          sound: false, // Informational, no sound
+        });
+      } catch (error) {
+        this.logger.error('Failed to send age verification desktop notification', { error });
+      }
+    }
+
+    // Discord notification (informational)
+    if (this.discordService) {
+      try {
+        await this.discordService.sendEmbed({
+          title: `Age Verified User: ${displayName}`,
+          description: `✅ This user is **age verified** (18+) and can be allowed in faster.`,
+          color: 0x00FF00, // Green
+          fields: [
+            { name: 'User ID', value: userId, inline: true },
+            { name: 'Status', value: '✅ Age Verified', inline: true },
+          ],
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error) {
+        this.logger.error('Failed to send age verification Discord notification', { error });
+      }
+    }
+
+    // VRCX VR overlay notification
+    if (this.vrcxService && this.vrcxService.isEnabled()) {
+      try {
+        await this.vrcxService.sendAlert(
+          `✅ Age Verified: ${displayName}`,
+          'VRChat Monitor',
+          userId
+        );
+      } catch (error) {
+        this.logger.error('Failed to send age verification VRCX notification', { error });
+      }
+    }
   }
 
   /**
