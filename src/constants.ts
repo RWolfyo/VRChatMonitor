@@ -245,30 +245,31 @@ export const DEDUPE_MAP_MAX_SIZE = 10000;
 export const AVATAR_PERFORMANCE_RATING_ORDER = ['Excellent', 'Good', 'Medium', 'Poor', 'VeryPoor'] as const;
 
 /**
- * Default avatar performance thresholds based on VRChat performance guidelines.
- * These values represent "Medium" performance tier boundaries.
+ * Default avatar performance thresholds with permissive settings.
+ * Thresholds set to null are disabled and will not trigger alerts.
  *
  * Guidelines:
- * - totalPolygons: 70,000 triangles (PC Medium limit)
- * - particleSystemCount: 8 particle systems maximum
- * - totalMaxParticles: 10,000 max particles across all systems
- * - boneCount: 400 bones (skeletal animation limit)
- * - physBoneComponentCount: 32 PhysBones components
- * - materialCount: 20 materials maximum
- * - lightCount: 0 (lights are extremely expensive, discouraged)
- * - audioSourceCount: 8 audio sources maximum
+ * - totalPolygons: 350,000 triangles (very permissive, allows complex avatars)
+ * - particleSystemCount: 32 particle systems maximum (4x VRChat Medium limit)
+ * - totalMaxParticles: 20,000 max particles across all systems (2x VRChat Medium)
+ * - boneCount: null (disabled - no bone count checking)
+ * - physBoneComponentCount: null (disabled - no PhysBones checking)
+ * - materialCount: null (disabled - no material count checking)
+ * - lightCount: null (disabled - no light checking)
+ * - audioSourceCount: null (disabled - no audio source checking)
  *
- * Note: These are conservative defaults. Users can customize per their needs.
+ * Note: These are permissive defaults that focus only on polygon and particle limits.
+ * Users can customize per their needs via config.json.
  */
 export const DEFAULT_AVATAR_THRESHOLDS = {
-  totalPolygons: 70000,
-  particleSystemCount: 8,
-  totalMaxParticles: 10000,
-  boneCount: 400,
-  physBoneComponentCount: 32,
-  materialCount: 20,
-  lightCount: 0,
-  audioSourceCount: 8,
+  totalPolygons: 350000,
+  particleSystemCount: 32,
+  totalMaxParticles: 20000,
+  boneCount: null,
+  physBoneComponentCount: null,
+  materialCount: null,
+  lightCount: null,
+  audioSourceCount: null,
 } as const;
 
 // ============================================================================

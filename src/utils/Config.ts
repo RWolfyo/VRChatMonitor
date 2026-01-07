@@ -76,7 +76,7 @@ export class ConfigManager {
    * Migrate config from older versions to current schema
    */
   private migrateConfig(config: Partial<Config>): Partial<Config> {
-    const CURRENT_CONFIG_VERSION = 3;
+    const CURRENT_CONFIG_VERSION = 4;
     const configVersion = config.version || 1;
 
     if (configVersion >= CURRENT_CONFIG_VERSION) {
@@ -152,11 +152,93 @@ export class ConfigManager {
           scanOnJoin: true,
           scanOnChange: true,
           cacheExpiry: 60,
-          autoHideAvatar: false, // Disabled by default (opt-in)
+          autoHideAvatar: true, // Enabled by default
           autoHideBlacklisted: false, // Disabled by default (opt-in)
           thresholds: { ...DEFAULT_AVATAR_THRESHOLDS },
         };
         migrationApplied = true;
+      }
+    }
+
+    // Migration v3 -> v4: Update avatar thresholds to more permissive values and enable autoHideAvatar
+    if (configVersion < 4) {
+      this.logger.info('Applying migration v3 -> v4: Updating avatar thresholds to permissive values');
+
+      if (!migrated.advanced) {
+        migrated.advanced = {} as any;
+      }
+
+      const advancedConfig = migrated.advanced as any;
+
+      // Update avatarScanning configuration with new permissive defaults
+      if (advancedConfig.avatarScanning) {
+        // Enable autoHideAvatar by default (was previously opt-in)
+        if (advancedConfig.avatarScanning.autoHideAvatar === false) {
+          advancedConfig.avatarScanning.autoHideAvatar = true;
+          migrationApplied = true;
+          this.logger.info('Enabled autoHideAvatar by default');
+        }
+
+        // Update thresholds to new permissive values
+        if (advancedConfig.avatarScanning.thresholds) {
+          const thresholds = advancedConfig.avatarScanning.thresholds;
+
+          // Update polygon limit: 70000 -> 350000
+          if (thresholds.totalPolygons === 70000) {
+            thresholds.totalPolygons = 350000;
+            migrationApplied = true;
+            this.logger.info('Updated totalPolygons threshold: 70000 -> 350000');
+          }
+
+          // Update particle system count: 8 -> 32
+          if (thresholds.particleSystemCount === 8) {
+            thresholds.particleSystemCount = 32;
+            migrationApplied = true;
+            this.logger.info('Updated particleSystemCount threshold: 8 -> 32');
+          }
+
+          // Update max particles: 10000 -> 20000
+          if (thresholds.totalMaxParticles === 10000) {
+            thresholds.totalMaxParticles = 20000;
+            migrationApplied = true;
+            this.logger.info('Updated totalMaxParticles threshold: 10000 -> 20000');
+          }
+
+          // Disable bone count check: 400 -> null
+          if (thresholds.boneCount === 400) {
+            thresholds.boneCount = null;
+            migrationApplied = true;
+            this.logger.info('Disabled boneCount threshold (set to null)');
+          }
+
+          // Disable PhysBone check: 32 -> null
+          if (thresholds.physBoneComponentCount === 32) {
+            thresholds.physBoneComponentCount = null;
+            migrationApplied = true;
+            this.logger.info('Disabled physBoneComponentCount threshold (set to null)');
+          }
+
+          // Disable material count check: 20 -> null
+          if (thresholds.materialCount === 20) {
+            thresholds.materialCount = null;
+            migrationApplied = true;
+            this.logger.info('Disabled materialCount threshold (set to null)');
+          }
+
+          // Disable light count check: 0 -> null
+          if (thresholds.lightCount === 0) {
+            thresholds.lightCount = null;
+            migrationApplied = true;
+            this.logger.info('Disabled lightCount threshold (set to null)');
+          }
+
+          // Disable audio source check: 8 -> null
+          if (thresholds.audioSourceCount === 8) {
+            thresholds.audioSourceCount = null;
+            migrationApplied = true;
+            this.logger.info('Disabled audioSourceCount threshold (set to null)');
+          }
+        }
       }
     }
 
@@ -228,7 +310,7 @@ export class ConfigManager {
     }
 
     return {
-      version: config.version || 3, // Current config version
+      version: config.version || 4, // Current config version
       vrchat: {
         username: config.vrchat?.username || '',
         password: config.vrchat?.password || '',
@@ -282,7 +364,7 @@ export class ConfigManager {
           scanOnJoin: config.advanced?.avatarScanning?.scanOnJoin ?? true,
           scanOnChange: config.advanced?.avatarScanning?.scanOnChange ?? true, // Enabled by default
           cacheExpiry: config.advanced?.avatarScanning?.cacheExpiry ?? 60,
-          autoHideAvatar: config.advanced?.avatarScanning?.autoHideAvatar ?? false, // Disabled by default
+          autoHideAvatar: config.advanced?.avatarScanning?.autoHideAvatar ?? true, // Enabled by default
           autoHideBlacklisted: config.advanced?.avatarScanning?.autoHideBlacklisted ?? false, // Disabled by default
           thresholds: {
             totalPolygons: config.advanced?.avatarScanning?.thresholds?.totalPolygons ?? DEFAULT_AVATAR_THRESHOLDS.totalPolygons,
@@ -291,14 +373,14 @@ export class ConfigManager {
             totalMaxParticles: config.advanced?.avatarScanning?.thresholds?.totalMaxParticles ?? DEFAULT_AVATAR_THRESHOLDS.totalMaxParticles,
             particleCollisionEnabled: config.advanced?.avatarScanning?.thresholds?.particleCollisionEnabled,
             particleTrailsEnabled: config.advanced?.avatarScanning?.thresholds?.particleTrailsEnabled,
-            boneCount: config.advanced?.avatarScanning?.thresholds?.boneCount ?? DEFAULT_AVATAR_THRESHOLDS.boneCount,
-            physBoneComponentCount: config.advanced?.avatarScanning?.thresholds?.physBoneComponentCount ?? DEFAULT_AVATAR_THRESHOLDS.physBoneComponentCount,
+            boneCount: config.advanced?.avatarScanning?.thresholds?.boneCount !== undefined ? config.advanced.avatarScanning.thresholds.boneCount : (DEFAULT_AVATAR_THRESHOLDS.boneCount ?? undefined),
+            physBoneComponentCount: config.advanced?.avatarScanning?.thresholds?.physBoneComponentCount !== undefined ? config.advanced.avatarScanning.thresholds.physBoneComponentCount : (DEFAULT_AVATAR_THRESHOLDS.physBoneComponentCount ?? undefined),
             physBoneColliderCount: config.advanced?.avatarScanning?.thresholds?.physBoneColliderCount,
             physBoneTransformCount: config.advanced?.avatarScanning?.thresholds?.physBoneTransformCount,
-            materialCount: config.advanced?.avatarScanning?.thresholds?.materialCount ?? DEFAULT_AVATAR_THRESHOLDS.materialCount,
+            materialCount: config.advanced?.avatarScanning?.thresholds?.materialCount !== undefined ? config.advanced.avatarScanning.thresholds.materialCount : (DEFAULT_AVATAR_THRESHOLDS.materialCount ?? undefined),
             meshCount: config.advanced?.avatarScanning?.thresholds?.meshCount,
-            lightCount: config.advanced?.avatarScanning?.thresholds?.lightCount ?? DEFAULT_AVATAR_THRESHOLDS.lightCount,
-            audioSourceCount: config.advanced?.avatarScanning?.thresholds?.audioSourceCount ?? DEFAULT_AVATAR_THRESHOLDS.audioSourceCount,
+            lightCount: config.advanced?.avatarScanning?.thresholds?.lightCount !== undefined ? config.advanced.avatarScanning.thresholds.lightCount : (DEFAULT_AVATAR_THRESHOLDS.lightCount ?? undefined),
+            audioSourceCount: config.advanced?.avatarScanning?.thresholds?.audioSourceCount !== undefined ? config.advanced.avatarScanning.thresholds.audioSourceCount : (DEFAULT_AVATAR_THRESHOLDS.audioSourceCount ?? undefined),
             fileSize: config.advanced?.avatarScanning?.thresholds?.fileSize,
             uncompressedSize: config.advanced?.avatarScanning?.thresholds?.uncompressedSize,
             totalTextureUsage: config.advanced?.avatarScanning?.thresholds?.totalTextureUsage,
