@@ -55,6 +55,7 @@ export interface LoggingConfig {
 export interface AdvancedConfig {
   cacheDir?: string;
   deduplicateWindow: number;
+  skipFriends?: boolean; // Skip ALL scanning for friends (blocklist, trust rank, avatar)
   trustRankAlerts?: TrustRankAlertsConfig;
   ageVerificationAlerts?: AgeVerificationAlertsConfig;
   avatarScanning?: AvatarScanningConfig;
@@ -77,6 +78,7 @@ export interface AvatarScanningConfig {
   scanOnChange: boolean; // Scan avatar when user changes avatar (requires polling)
   cacheExpiry: number; // Avatar data cache expiry in minutes (default: 60)
   autoHideAvatar: boolean; // Automatically hide avatars that violate thresholds (ignores friends)
+  autoHideBlacklisted: boolean; // Automatically hide avatars of blacklisted users (ignores friends)
   thresholds: AvatarThresholds; // Thresholds for avatar performance metrics
 }
 

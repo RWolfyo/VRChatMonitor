@@ -326,6 +326,15 @@ export class VRChatMonitor extends EventEmitter {
 
     this.logger.info(`Player joined: ${displayName} (${userId})`);
 
+    // Skip all scanning for friends if enabled
+    if (this.config.advanced.skipFriends && this.vrchatAPI) {
+      const userProfile = await this.vrchatAPI.getUserProfile(userId);
+      if (userProfile && userProfile.isFriend === true) {
+        this.logger.debug(`Skipping all scanning for friend: ${displayName}`);
+        return;
+      }
+    }
+
     // Check against blocklist
     try {
       if (!this.blocklistManager) {
@@ -339,6 +348,11 @@ export class VRChatMonitor extends EventEmitter {
         this.logger.warn(`⚠️ BLOCKED USER DETECTED: ${displayName} (${userId})`, {
           matches: result.matches,
         });
+
+        // Auto-hide blacklisted user's avatar if enabled (skip friends)
+        if (this.config.advanced.avatarScanning?.autoHideBlacklisted && this.moderationStorage?.isInitialized()) {
+          await this.autoHideAvatar(userId, displayName);
+        }
 
         await this.sendAlerts(result);
       }

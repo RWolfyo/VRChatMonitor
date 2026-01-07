@@ -40,6 +40,7 @@
   "advanced": {
     "cacheDir": "",
     "deduplicateWindow": 30,
+    "skipFriends": true,
     "trustRankAlerts": {
       "enabled": true,
       "minimumRank": "new_user"
@@ -53,6 +54,7 @@
       "scanOnChange": true,
       "cacheExpiry": 60,
       "autoHideAvatar": false,
+      "autoHideBlacklisted": false,
       "thresholds": {
         "totalPolygons": 70000,
         "totalVertices": null,
