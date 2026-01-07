@@ -298,6 +298,112 @@ export class CommandHandler {
       },
     });
 
+    // Trust rank alerts command
+    this.registerCommand({
+      name: 'trust-rank',
+      aliases: ['trust', 'rank'],
+      description: 'Configure trust rank alerts (enable/disable or set minimum rank)',
+      usage: 'trust-rank [on|off|<rank>]',
+      handler: async (args) => {
+        if (args.length === 0) {
+          // Show current settings
+          const config = this.monitor['config'];
+          const trustConfig = config.advanced.trustRankAlerts;
+          console.log();
+          console.log(chalk.white.bold('Trust Rank Alerts:'));
+          console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
+          console.log();
+          console.log(`  Status: ${trustConfig?.enabled ? chalk.green('✓ Enabled') : chalk.red('✗ Disabled')}`);
+          console.log(`  Minimum Rank: ${chalk.cyan(trustConfig?.minimumRank || 'new_user')}`);
+          console.log();
+          console.log(chalk.gray('Available ranks (lowest to highest):'));
+          console.log(chalk.gray('  nuisance → visitor → new_user → user → known_user → trusted_user → veteran_user'));
+          console.log();
+          console.log(chalk.gray('Usage: trust-rank [on|off|<rank>]'));
+          console.log(chalk.gray('Example: trust-rank visitor  (alert for visitors and below)'));
+          console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
+          console.log();
+          return;
+        }
+
+        const arg = args[0].toLowerCase();
+
+        if (arg === 'on' || arg === 'enable') {
+          this.monitor['configManager'].updateConfig('advanced.trustRankAlerts.enabled', true);
+          console.log();
+          console.log(chalk.green('✓ Trust rank alerts enabled'));
+          console.log();
+        } else if (arg === 'off' || arg === 'disable') {
+          this.monitor['configManager'].updateConfig('advanced.trustRankAlerts.enabled', false);
+          console.log();
+          console.log(chalk.yellow('✓ Trust rank alerts disabled'));
+          console.log();
+        } else {
+          // Try to set minimum rank
+          const validRanks = ['nuisance', 'visitor', 'new_user', 'user', 'known_user', 'trusted_user', 'veteran_user'];
+          const rank = arg.replace(/-/g, '_'); // Allow dashes: new-user -> new_user
+
+          if (validRanks.includes(rank)) {
+            this.monitor['configManager'].updateConfig('advanced.trustRankAlerts.minimumRank', rank);
+            console.log();
+            console.log(chalk.green(`✓ Minimum trust rank set to: ${rank}`));
+            console.log(chalk.gray(`  Will alert for ranks below ${rank}`));
+            console.log();
+          } else {
+            console.log();
+            console.log(chalk.red(`❌ Invalid rank: ${arg}`));
+            console.log(chalk.gray('Valid ranks: nuisance, visitor, new_user, user, known_user, trusted_user, veteran_user'));
+            console.log();
+          }
+        }
+      },
+    });
+
+    // Age verification alerts command
+    this.registerCommand({
+      name: 'age-alerts',
+      aliases: ['age', 'age-verify'],
+      description: 'Toggle age verification alerts (informational)',
+      usage: 'age-alerts [on|off]',
+      handler: async (args) => {
+        if (args.length === 0) {
+          // Show current settings
+          const config = this.monitor['config'];
+          const ageConfig = config.advanced.ageVerificationAlerts;
+          console.log();
+          console.log(chalk.white.bold('Age Verification Alerts:'));
+          console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
+          console.log();
+          console.log(`  Status: ${ageConfig?.enabled ? chalk.green('✓ Enabled') : chalk.red('✗ Disabled')}`);
+          console.log();
+          console.log(chalk.gray('Shows informational alerts for age-verified users (18+)'));
+          console.log(chalk.gray('Usage: age-alerts [on|off]'));
+          console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
+          console.log();
+          return;
+        }
+
+        const arg = args[0].toLowerCase();
+
+        if (arg === 'on' || arg === 'enable') {
+          this.monitor['configManager'].updateConfig('advanced.ageVerificationAlerts.enabled', true);
+          console.log();
+          console.log(chalk.green('✓ Age verification alerts enabled'));
+          console.log();
+        } else if (arg === 'off' || arg === 'disable') {
+          this.monitor['configManager'].updateConfig('advanced.ageVerificationAlerts.enabled', false);
+          console.log();
+          console.log(chalk.yellow('✓ Age verification alerts disabled'));
+          console.log();
+        } else {
+          console.log();
+          console.log(chalk.red(`❌ Invalid argument: ${arg}`));
+          console.log(chalk.gray('Usage: age-alerts [on|off]'));
+          console.log();
+        }
+      },
+    });
+
     // Quit command
     this.registerCommand({
       name: 'quit',

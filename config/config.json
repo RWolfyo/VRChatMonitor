@@ -39,6 +39,13 @@
   },
   "advanced": {
     "cacheDir": "",
-    "deduplicateWindow": 30
+    "deduplicateWindow": 30,
+    "trustRankAlerts": {
+      "enabled": true,
+      "minimumRank": "new_user"
+    },
+    "ageVerificationAlerts": {
+      "enabled": true
+    }
   }
 }
