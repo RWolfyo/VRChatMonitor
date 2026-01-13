@@ -56,7 +56,14 @@ export class ConfigManager {
   public load(): Config {
     try {
       const configText = fs.readFileSync(this.configPath, 'utf-8');
-      let parsedConfig = JSON.parse(configText) as Partial<Config>;
+      let parsedConfig: Partial<Config>;
+
+      try {
+        parsedConfig = JSON.parse(configText) as Partial<Config>;
+      } catch (parseError: any) {
+        // Handle JSON parsing errors with user-friendly messages
+        this.handleJsonParseError(parseError, configText);
+      }
 
       // Migrate config if needed
       parsedConfig = this.migrateConfig(parsedConfig);
@@ -70,6 +77,139 @@ export class ConfigManager {
       this.logger.error('Failed to load configuration', { error });
       throw new Error(`Failed to load config.json: ${error}`);
     }
+  }
+
+  /**
+   * Handle JSON parse errors with user-friendly error messages
+   */
+  private handleJsonParseError(error: any, configText: string): never {
+    console.error('\n' + '='.repeat(70));
+    console.error('❌ CONFIG ERROR: Failed to parse config.json');
+    console.error('='.repeat(70));
+    console.error('\nYour config.json file has a syntax error and cannot be read.\n');
+
+    // Extract error details
+    const errorMessage = error.message || '';
+
+    // Try to extract line/column info from error message
+    const positionMatch = errorMessage.match(/position (\d+)/i);
+    const lineMatch = errorMessage.match(/line (\d+)/i);
+    const columnMatch = errorMessage.match(/column (\d+)/i);
+
+    if (positionMatch || lineMatch) {
+      const lines = configText.split('\n');
+      let errorLine = 0;
+      let errorColumn = 0;
+
+      if (lineMatch && columnMatch) {
+        errorLine = parseInt(lineMatch[1], 10) - 1;
+        errorColumn = parseInt(columnMatch[1], 10) - 1;
+      } else if (positionMatch) {
+        const position = parseInt(positionMatch[1], 10);
+        let currentPos = 0;
+        for (let i = 0; i < lines.length; i++) {
+          if (currentPos + lines[i].length + 1 >= position) {
+            errorLine = i;
+            errorColumn = position - currentPos;
+            break;
+          }
+          currentPos += lines[i].length + 1; // +1 for newline
+        }
+      }
+
+      console.error('📍 Error Location:');
+      console.error(`   File: ${this.configPath}`);
+      console.error(`   Line: ${errorLine + 1}, Column: ${errorColumn + 1}`);
+      console.error('');
+
+      // Show context around the error (3 lines before and after)
+      const startLine = Math.max(0, errorLine - 3);
+      const endLine = Math.min(lines.length - 1, errorLine + 3);
+
+      console.error('📄 Problem Area:');
+      for (let i = startLine; i <= endLine; i++) {
+        const lineNum = (i + 1).toString().padStart(4, ' ');
+        const isErrorLine = i === errorLine;
+        const prefix = isErrorLine ? '>>> ' : '    ';
+        const line = lines[i];
+
+        console.error(`${prefix}${lineNum} | ${line}`);
+
+        if (isErrorLine && errorColumn >= 0) {
+          // Show pointer to exact error position
+          const pointer = ' '.repeat(prefix.length + lineNum.length + 3 + errorColumn) + '^';
+          console.error(pointer);
+        }
+      }
+      console.error('');
+    }
+
+    // Provide specific guidance based on error type
+    console.error('🔧 Common Issues and Fixes:');
+    console.error('');
+
+    if (errorMessage.includes('Unexpected token') || errorMessage.includes('Unexpected string')) {
+      if (errorMessage.includes('Unexpected token }') || errorMessage.includes('Unexpected token ]')) {
+        console.error('  • Extra closing bracket/brace detected');
+        console.error('    → Check if you have an extra } or ] that shouldn\'t be there');
+        console.error('    → Make sure every { has a matching }');
+        console.error('    → Make sure every [ has a matching ]');
+      } else if (errorMessage.includes('Unexpected token ,')) {
+        console.error('  • Extra comma detected');
+        console.error('    → Remove the comma before the closing } or ]');
+        console.error('    → Example: "value": 123, } ← Remove this comma');
+      } else {
+        console.error('  • Missing comma between properties');
+        console.error('    → Add a comma after the previous value');
+        console.error('    → Example: "enabled": true ← Missing comma here');
+        console.error('               "value": 123');
+      }
+    } else if (errorMessage.includes('Unexpected end of JSON') || errorMessage.includes('Unexpected end')) {
+      console.error('  • Missing closing bracket/brace');
+      console.error('    → Check if you deleted a } or ]');
+      console.error('    → Make sure every { has a matching }');
+      console.error('    → Make sure every [ has a matching ]');
+      console.error('    → Count your opening and closing brackets - they should match!');
+    } else if (errorMessage.includes('Expected property name') || errorMessage.includes('Expected double-quoted')) {
+      console.error('  • Missing or invalid property name');
+      console.error('    → Property names must be in "double quotes"');
+      console.error('    → Example: "enabled": true (correct)');
+      console.error('    → Example: enabled: true (wrong - missing quotes)');
+    } else {
+      console.error('  • Check for these common mistakes:');
+      console.error('    → Missing commas between properties');
+      console.error('    → Extra commas before closing } or ]');
+      console.error('    → Missing quotes around property names or string values');
+      console.error('    → Unmatched brackets { } or [ ]');
+    }
+
+    console.error('');
+    console.error('💡 Tips:');
+    console.error('  • Use a JSON validator to check your config: https://jsonlint.com');
+    console.error('  • Compare your config with config/config.json from the repository');
+    console.error('  • Make a backup before editing: copy config.json to config.json.backup');
+    console.error('  • Use a proper text editor (VS Code, Notepad++) - not Notepad!');
+    console.error('');
+    console.error('📂 Config Location: ' + this.configPath);
+    console.error('');
+    console.error('='.repeat(70));
+    console.error('\nPress any key to exit...');
+    console.error('='.repeat(70));
+
+    // Wait for user input before exiting
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.once('data', () => {
+      process.exit(1);
+    });
+
+    // Also exit after 60 seconds if no input
+    setTimeout(() => {
+      process.exit(1);
+    }, 60000);
+
+    // This function never returns
+    throw new Error('Config parse error');
   }
 
   /**
