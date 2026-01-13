@@ -12,6 +12,7 @@ import {
   LOG_BUFFER_MAX_SIZE,
 } from './constants';
 import { sanitizeLogBuffer, sanitizeSensitiveData } from './utils/ErrorUtils';
+import { SeverityFormatter, MatchTypeFormatter, LocationFormatter } from './utils/FormatUtils';
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -185,10 +186,10 @@ async function main() {
 
       for (let i = 0; i < result.matches.length; i++) {
         const match = result.matches[i];
-        const icon = getSeverityIcon(match.severity);
-        const severityColor = getSeverityColor(match.severity);
+        const icon = SeverityFormatter.getIcon(match.severity);
+        const severityColor = SeverityFormatter.getChalkColor(match.severity);
 
-        console.log(chalk.white(`  ${i + 1}. ${icon} ${getMatchTypeLabel(match.type)}`));
+        console.log(chalk.white(`  ${i + 1}. ${icon} ${MatchTypeFormatter.getLabel(match.type)}`));
         console.log(chalk.gray(`     Severity: ${severityColor(match.severity.toUpperCase())}`));
 
         // Show group information for group-related matches
@@ -201,7 +202,7 @@ async function main() {
         if (match.keyword) {
           console.log(chalk.magenta(`     Keyword Pattern: ${match.keyword}`));
           if (match.keywordMatchLocation) {
-            const locationLabel = getLocationLabel(match.keywordMatchLocation);
+            const locationLabel = LocationFormatter.getLabel(match.keywordMatchLocation);
             console.log(chalk.gray(`     Matched In: ${locationLabel}`));
           }
           if (match.matchedText) {
@@ -321,73 +322,7 @@ async function main() {
   }
 }
 
-/**
- * Get severity icon for console output
- */
-function getSeverityIcon(severity: string): string {
-  switch (severity) {
-    case 'high':
-      return '🔴';
-    case 'medium':
-      return '🟡';
-    case 'low':
-      return '🟢';
-    default:
-      return '⚠️';
-  }
-}
-
-/**
- * Get severity color function
- */
-function getSeverityColor(severity: string): typeof chalk.red {
-  switch (severity) {
-    case 'high':
-      return chalk.red;
-    case 'medium':
-      return chalk.yellow;
-    case 'low':
-      return chalk.green;
-    default:
-      return chalk.white;
-  }
-}
-
-/**
- * Get human-readable match type label
- */
-function getMatchTypeLabel(type: string): string {
-  switch (type) {
-    case 'blockedGroup':
-      return 'Group Match (Potential Concern)';
-    case 'blockedUser':
-      return 'Blacklisted User (Confirmed)';
-    case 'keywordGroup':
-      return 'Keyword Match (Group)';
-    case 'keywordUser':
-      return 'Keyword Match (Profile)';
-    default:
-      return type;
-  }
-}
-
-/**
- * Get human-readable location label
- */
-function getLocationLabel(location: string): string {
-  switch (location) {
-    case 'bio':
-      return 'User Bio/Profile';
-    case 'displayName':
-      return 'User Display Name';
-    case 'groupName':
-      return 'Group Name';
-    case 'groupDescription':
-      return 'Group Description';
-    default:
-      return location;
-  }
-}
+// Formatting functions removed - now using shared utilities from FormatUtils
 
 /**
  * Handle uncaught errors

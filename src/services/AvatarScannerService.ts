@@ -152,6 +152,9 @@ export class AvatarScannerService {
   /** Cache expiry time in milliseconds */
   private cacheExpiryMs: number;
 
+  /** Auto-prune timer for periodic cache cleanup */
+  private autoPruneTimer: NodeJS.Timeout | null = null;
+
   /**
    * Initialize the Avatar Scanner Service.
    *
@@ -165,6 +168,7 @@ export class AvatarScannerService {
     cacheExpiryMinutes: number = 60
   ) {
     this.cacheExpiryMs = cacheExpiryMinutes * MINUTES_TO_MS;
+    this.startAutoPruning();
   }
 
   /**
@@ -176,12 +180,13 @@ export class AvatarScannerService {
    *
    * @param userId - VRChat user ID (usr_xxx format)
    * @param displayName - User's display name for logging purposes
+   * @param cachedUserProfile - Optional cached user profile to avoid redundant API calls
    * @returns Avatar data with performance metrics, or null if unavailable/error
    */
-  public async getAvatarForUser(userId: string, displayName: string): Promise<AvatarData | null> {
+  public async getAvatarForUser(userId: string, displayName: string, cachedUserProfile?: any): Promise<AvatarData | null> {
     try {
-      // Get user profile to find current avatar ID
-      const userProfile = await this.vrchatAPI.getUserProfile(userId);
+      // Use cached profile or fetch if not provided
+      const userProfile = cachedUserProfile || await this.vrchatAPI.getUserProfile(userId);
       if (!userProfile || !userProfile.currentAvatar) {
         this.logger.debug(`No avatar found for user ${displayName} (${userId})`);
         return null;
@@ -482,10 +487,41 @@ export class AvatarScannerService {
   }
 
   /**
+   * Start automatic cache pruning at regular intervals.
+   * Prunes cache every 30 minutes to prevent memory buildup.
+   */
+  private startAutoPruning(): void {
+    // Prune every 30 minutes
+    const PRUNE_INTERVAL_MS = 30 * 60 * 1000;
+
+    this.autoPruneTimer = setInterval(() => {
+      this.pruneCache();
+    }, PRUNE_INTERVAL_MS);
+
+    // Don't let the timer prevent the process from exiting
+    if (this.autoPruneTimer.unref) {
+      this.autoPruneTimer.unref();
+    }
+
+    this.logger.debug('Avatar cache auto-pruning started (every 30 minutes)');
+  }
+
+  /**
+   * Stop automatic cache pruning (cleanup on shutdown).
+   */
+  public stopAutoPruning(): void {
+    if (this.autoPruneTimer) {
+      clearInterval(this.autoPruneTimer);
+      this.autoPruneTimer = null;
+      this.logger.debug('Avatar cache auto-pruning stopped');
+    }
+  }
+
+  /**
    * Remove expired entries from cache to prevent unbounded memory growth.
    *
    * Scans cache for entries older than the configured expiry time and removes them.
-   * Should be called periodically (e.g., every hour) to maintain reasonable memory usage.
+   * Called automatically every 30 minutes, but can also be triggered manually.
    */
   public pruneCache(): void {
     const now = Date.now();

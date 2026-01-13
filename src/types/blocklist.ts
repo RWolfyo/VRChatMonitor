@@ -58,8 +58,8 @@ export interface NormalizedBlocklistData {
   whitelistUsersDetailed: WhitelistUserEntry[];    // Full details
 }
 
-export type MatchType = 'blockedGroup' | 'blockedUser' | 'keywordGroup' | 'keywordUser';
-export type KeywordMatchLocation = 'bio' | 'displayName' | 'groupName' | 'groupDescription' | 'groupRules' | 'statusDescription' | 'pronouns';
+export type MatchType = 'blockedGroup' | 'blockedUser' | 'keywordGroup' | 'keywordUser' | 'obscenity';
+export type KeywordMatchLocation = 'bio' | 'displayName' | 'groupName' | 'groupDescription' | 'groupRules' | 'statusDescription' | 'pronouns' | 'groupShortCode' | 'groupDiscriminator';
 
 export interface Match {
   type: MatchType;

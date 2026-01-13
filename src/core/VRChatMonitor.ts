@@ -21,6 +21,7 @@ import {
   TRUST_RANK_DISPLAY_NAMES,
 } from '../utils/TrustRankUtils';
 import { VRChatModerationStorage } from '../utils/VRChatModerationStorage';
+import { SeverityFormatter } from '../utils/FormatUtils';
 
 export class VRChatMonitor extends EventEmitter {
   private logger: Logger;
@@ -154,6 +155,11 @@ export class VRChatMonitor extends EventEmitter {
       // Stop auto-update checks
       if (this.autoUpdateService) {
         this.autoUpdateService.stop();
+      }
+
+      // Stop avatar scanner auto-pruning
+      if (this.avatarScanner) {
+        this.avatarScanner.stopAutoPruning();
       }
 
       // Disconnect VRChat API
@@ -344,13 +350,20 @@ export class VRChatMonitor extends EventEmitter {
 
     this.logger.info(`Player joined: ${displayName} (${userId})`);
 
-    // Skip all scanning for friends if enabled
-    if (this.config.advanced.skipFriends && this.vrchatAPI) {
-      const userProfile = await this.vrchatAPI.getUserProfile(userId);
-      if (userProfile && userProfile.isFriend === true) {
-        this.logger.debug(`Skipping all scanning for friend: ${displayName}`);
-        return;
+    // Fetch user profile once if we need it (for friend check, trust rank, or avatar scanning)
+    let userProfile: any = null;
+    if (this.vrchatAPI) {
+      try {
+        userProfile = await this.vrchatAPI.getUserProfile(userId);
+      } catch (error) {
+        this.logger.debug(`Failed to fetch user profile for ${displayName}:`, { error });
       }
+    }
+
+    // Skip all scanning for friends if enabled
+    if (this.config.advanced.skipFriends && userProfile && userProfile.isFriend === true) {
+      this.logger.debug(`Skipping all scanning for friend: ${displayName}`);
+      return;
     }
 
     // Check against blocklist
@@ -369,7 +382,7 @@ export class VRChatMonitor extends EventEmitter {
 
         // Auto-hide blacklisted user's avatar if enabled (skip friends)
         if (this.config.advanced.avatarScanning?.autoHideBlacklisted && this.moderationStorage?.isInitialized()) {
-          await this.autoHideAvatar(userId, displayName);
+          await this.autoHideAvatar(userId, displayName, userProfile);
         }
 
         await this.sendAlerts(result);
@@ -378,15 +391,15 @@ export class VRChatMonitor extends EventEmitter {
       this.logger.error(`Error checking user ${userId}`, { error });
     }
 
-    // Check trust rank and age verification (requires VRChat API)
-    if (this.vrchatAPI) {
-      await this.checkTrustRankAndAgeVerification(userId, displayName);
+    // Check trust rank and age verification (pass cached profile)
+    if (this.vrchatAPI && userProfile) {
+      await this.checkTrustRankAndAgeVerification(userId, displayName, userProfile);
     }
 
-    // Check avatar performance (requires VRChat API and avatar scanner)
-    if (this.vrchatAPI && this.avatarScanner && this.config.advanced.avatarScanning?.enabled) {
+    // Check avatar performance (pass cached profile)
+    if (this.vrchatAPI && this.avatarScanner && this.config.advanced.avatarScanning?.enabled && userProfile) {
       if (this.config.advanced.avatarScanning.scanOnJoin) {
-        await this.checkAvatarPerformance(userId, displayName);
+        await this.checkAvatarPerformance(userId, displayName, userProfile);
       }
     }
   }
@@ -494,7 +507,7 @@ export class VRChatMonitor extends EventEmitter {
   /**
    * Check trust rank and age verification status
    */
-  private async checkTrustRankAndAgeVerification(userId: string, displayName: string): Promise<void> {
+  private async checkTrustRankAndAgeVerification(userId: string, displayName: string, userProfile?: any): Promise<void> {
     const trustConfig = this.config.advanced.trustRankAlerts;
     const ageConfig = this.config.advanced.ageVerificationAlerts;
 
@@ -504,8 +517,8 @@ export class VRChatMonitor extends EventEmitter {
     }
 
     try {
-      // Fetch user profile to get tags and age verification status
-      const user = await this.vrchatAPI!.getUserProfile(userId);
+      // Use cached profile or fetch if not provided
+      const user = userProfile || await this.vrchatAPI!.getUserProfile(userId);
 
       if (!user) {
         this.logger.warn(`Failed to fetch user profile for ${displayName} (${userId})`);
@@ -664,7 +677,7 @@ export class VRChatMonitor extends EventEmitter {
   /**
    * Check avatar performance and send alerts if thresholds exceeded
    */
-  private async checkAvatarPerformance(userId: string, displayName: string): Promise<void> {
+  private async checkAvatarPerformance(userId: string, displayName: string, userProfile?: any): Promise<void> {
     if (!this.avatarScanner || !this.config.advanced.avatarScanning) {
       return;
     }
@@ -672,8 +685,8 @@ export class VRChatMonitor extends EventEmitter {
     try {
       this.logger.debug(`Checking avatar performance for ${displayName} (${userId})`);
 
-      // Get avatar data (with caching)
-      const avatarData = await this.avatarScanner.getAvatarForUser(userId, displayName);
+      // Get avatar data (with caching, pass user profile to avoid redundant API call)
+      const avatarData = await this.avatarScanner.getAvatarForUser(userId, displayName, userProfile);
       if (!avatarData) {
         this.logger.debug(`No avatar data available for ${displayName}`);
         return;
@@ -895,7 +908,7 @@ export class VRChatMonitor extends EventEmitter {
         fields.push({
           name: `⚠️ Performance Violations (${violations.length})`,
           value: violations.map((v) => {
-            const emoji = v.severity === 'high' ? '🔴' : v.severity === 'medium' ? '🟠' : '🟡';
+            const emoji = SeverityFormatter.getEmoji(v.severity);
             let valueStr = '';
             if (typeof v.value === 'number' && typeof v.threshold === 'number') {
               valueStr = `${v.value.toLocaleString()} / ${v.threshold.toLocaleString()}`;
@@ -921,7 +934,7 @@ export class VRChatMonitor extends EventEmitter {
     // VRCX VR overlay notification
     if (this.vrcxService && this.vrcxService.isEnabled()) {
       try {
-        const severityEmoji = hasHighSeverity ? '🔴' : '⚠️';
+        const severityEmoji = hasHighSeverity ? SeverityFormatter.getEmoji('high') : '⚠️';
         await this.vrcxService.sendAlert(
           `${severityEmoji} Performance Issue: ${displayName}`,
           `User wearing heavy avatar: ${violations.length} violations`,
@@ -937,21 +950,21 @@ export class VRChatMonitor extends EventEmitter {
    * Automatically hide user's avatar if they're not a friend
    * Writes to VRChat's local player moderation storage
    */
-  private async autoHideAvatar(userId: string, displayName: string): Promise<void> {
+  private async autoHideAvatar(userId: string, displayName: string, userProfile?: any): Promise<void> {
     if (!this.vrchatAPI || !this.moderationStorage) {
       return;
     }
 
     try {
-      // Check if user is a friend
-      const userProfile = await this.vrchatAPI.getUserProfile(userId);
-      if (!userProfile) {
+      // Use cached profile or fetch if not provided
+      const profile = userProfile || await this.vrchatAPI.getUserProfile(userId);
+      if (!profile) {
         this.logger.debug(`Could not get profile for ${displayName}, skipping auto-hide`);
         return;
       }
 
       // Skip friends
-      if (userProfile.isFriend === true) {
+      if (profile.isFriend === true) {
         this.logger.debug(`Skipping auto-hide for friend: ${displayName}`);
         return;
       }

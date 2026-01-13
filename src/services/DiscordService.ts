@@ -1,13 +1,11 @@
 import { Logger } from '../utils/Logger';
+import { SeverityFormatter, MatchTypeFormatter, LocationFormatter } from '../utils/FormatUtils';
 import {
   DISCORD_MAX_RETRIES,
   DISCORD_RETRY_DELAY_MS,
   DISCORD_RATE_LIMIT_DELAY_MS,
   DISCORD_MAX_QUEUE_SIZE,
   DISCORD_MATCHED_TEXT_MAX_LENGTH,
-  DISCORD_COLOR_HIGH_SEVERITY,
-  DISCORD_COLOR_MEDIUM_SEVERITY,
-  DISCORD_COLOR_LOW_SEVERITY,
   DISCORD_COLOR_DEFAULT,
   DISCORD_COLOR_UPDATE_AVAILABLE,
 } from '../constants';
@@ -256,89 +254,53 @@ export class DiscordService {
   }
 
   /**
-   * Get severity color for embed
+   * Get severity color for embed (wrapper for numeric severity)
    */
   private getSeverityColor(severity: number): number {
+    // Convert numeric severity to string
+    let severityString: 'high' | 'medium' | 'low';
     switch (severity) {
-      case 3: // high
-        return DISCORD_COLOR_HIGH_SEVERITY;
-      case 2: // medium
-        return DISCORD_COLOR_MEDIUM_SEVERITY;
-      case 1: // low
-        return DISCORD_COLOR_LOW_SEVERITY;
+      case 3:
+        severityString = 'high';
+        break;
+      case 2:
+        severityString = 'medium';
+        break;
+      case 1:
+        severityString = 'low';
+        break;
       default:
         return DISCORD_COLOR_DEFAULT;
     }
+    return SeverityFormatter.getDiscordColor(severityString);
   }
 
   /**
-   * Get icon for match type
+   * Get icon for match type (wrapper for shared formatter)
    */
   private getMatchTypeIcon(type: string): string {
-    switch (type) {
-      case 'blockedGroup':
-        return '🚫';
-      case 'blockedUser':
-        return '🔒';
-      case 'keywordGroup':
-        return '🔍';
-      case 'keywordUser':
-        return '👤';
-      default:
-        return '⚠️';
-    }
+    return MatchTypeFormatter.getIcon(type as any);
   }
 
   /**
-   * Format match type for display
+   * Format match type for display (wrapper for shared formatter)
    */
   private formatMatchType(type: string): string {
-    switch (type) {
-      case 'blockedGroup':
-        return 'Group Match (Potential Concern)';
-      case 'blockedUser':
-        return 'Blacklisted User (Confirmed)';
-      case 'keywordGroup':
-        return 'Keyword Match (Group)';
-      case 'keywordUser':
-        return 'Keyword Match (Profile)';
-      default:
-        return type;
-    }
+    return MatchTypeFormatter.getLabel(type as any);
   }
 
   /**
-   * Get severity emoji
+   * Get severity emoji (wrapper for shared formatter)
    */
   private getSeverityEmoji(severity: string): string {
-    switch (severity) {
-      case 'high':
-        return '🔴';
-      case 'medium':
-        return '🟡';
-      case 'low':
-        return '🟢';
-      default:
-        return '⚠️';
-    }
+    return SeverityFormatter.getEmoji(severity as any);
   }
 
   /**
-   * Format match location for display
+   * Format match location for display (wrapper for shared formatter)
    */
   private formatMatchLocation(location: string): string {
-    switch (location) {
-      case 'bio':
-        return 'User Bio/Profile';
-      case 'displayName':
-        return 'User Display Name';
-      case 'groupName':
-        return 'Group Name';
-      case 'groupDescription':
-        return 'Group Description';
-      default:
-        return location;
-    }
+    return LocationFormatter.getLabel(location as any);
   }
 
   /**
