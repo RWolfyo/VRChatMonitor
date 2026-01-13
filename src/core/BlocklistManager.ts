@@ -605,6 +605,28 @@ export class BlocklistManager extends EventEmitter {
   }
 
   /**
+   * Check if a specific user ID is in the blocked users table
+   * Used for checking avatar authors against the blocklist
+   */
+  public async isUserBlocked(userId: string): Promise<{ reason: string; severity: string; author: string } | null> {
+    if (!this.db) {
+      throw new Error('BlocklistManager not initialized');
+    }
+
+    const blockedUser = this.db.prepare('SELECT * FROM blocked_users WHERE user_id = ?').get(userId);
+
+    if (blockedUser) {
+      return {
+        reason: blockedUser.reason || 'Blocked user',
+        severity: blockedUser.severity || 'high',
+        author: blockedUser.author || 'Unknown',
+      };
+    }
+
+    return null;
+  }
+
+  /**
    * Check if user is in any blocked groups or matches patterns
    */
   public async checkUser(userId: string, displayName: string): Promise<MatchResult> {

@@ -44,6 +44,9 @@ export interface AvatarData {
   /** Avatar display name */
   avatarName: string;
 
+  /** Author/creator user ID */
+  authorId: string;
+
   /** Author/creator username */
   authorName: string;
 
@@ -232,6 +235,7 @@ export class AvatarScannerService {
       const avatarData: AvatarData = {
         avatarId: avatar.id,
         avatarName: avatar.name,
+        authorId: avatar.authorId,
         authorName: avatar.authorName,
         performanceRating: this.extractPerformanceRating(avatar),
         thumbnailUrl: avatar.thumbnailImageUrl,

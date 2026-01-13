@@ -614,26 +614,149 @@ export class VRChatMonitor extends EventEmitter {
         return;
       }
 
+      // Check if avatar author is blacklisted
+      const authorBlacklisted = await this.checkAvatarAuthorBlacklist(avatarData, displayName, userId);
+
       // Check against thresholds
       const violations = this.avatarScanner.checkAvatarThresholds(
         avatarData,
         this.config.advanced.avatarScanning.thresholds
       );
 
-      if (violations.length > 0) {
-        this.logger.info(`⚠️ User ${displayName} is wearing a performance-heavy avatar: ${violations.length} violations (${avatarData.avatarName})`);
+      if (violations.length > 0 || authorBlacklisted) {
+        if (violations.length > 0) {
+          this.logger.info(`⚠️ User ${displayName} is wearing a performance-heavy avatar: ${violations.length} violations (${avatarData.avatarName})`);
+        }
 
         // Auto-hide avatar if enabled (skip friends)
         if (this.config.advanced.avatarScanning.autoHideAvatar && this.moderationStorage?.isInitialized()) {
           await this.autoHideAvatar(userId, displayName);
         }
 
-        await this.sendAvatarAlert(displayName, userId, avatarData, violations);
+        if (violations.length > 0) {
+          await this.sendAvatarAlert(displayName, userId, avatarData, violations);
+        }
       } else {
         this.logger.debug(`User ${displayName}'s avatar performance is acceptable`);
       }
     } catch (error) {
       this.logger.error(`Error checking avatar performance for ${displayName} (${userId})`, { error });
+    }
+  }
+
+  /**
+   * Check if avatar author is blacklisted
+   */
+  private async checkAvatarAuthorBlacklist(
+    avatarData: AvatarData,
+    displayName: string,
+    userId: string
+  ): Promise<boolean> {
+    if (!this.blocklistManager) {
+      return false;
+    }
+
+    try {
+      // Check if avatar author is in the blocklist
+      const authorMatch = await this.blocklistManager.isUserBlocked(avatarData.authorId);
+
+      if (authorMatch) {
+        this.logger.info(`🚨 User ${displayName} is wearing an avatar created by blacklisted user: ${avatarData.authorName} (${avatarData.authorId})`);
+
+        // Send alert about blacklisted avatar author
+        await this.sendBlacklistedAvatarAuthorAlert(displayName, userId, avatarData, authorMatch);
+
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      this.logger.error(`Error checking avatar author blacklist for ${displayName}`, { error });
+      return false;
+    }
+  }
+
+  /**
+   * Send alert for avatar created by blacklisted user
+   */
+  private async sendBlacklistedAvatarAuthorAlert(
+    displayName: string,
+    userId: string,
+    avatarData: AvatarData,
+    authorMatch: any
+  ): Promise<void> {
+    // Desktop notification
+    if (this.config.notifications.desktop.enabled) {
+      try {
+        await this.notificationService.notify({
+          title: `🚨 Blacklisted Avatar Creator: ${displayName}`,
+          message: `User is wearing avatar by blacklisted creator\nAuthor: ${avatarData.authorName}\nAvatar: ${avatarData.avatarName}\nReason: ${authorMatch.reason || 'Unknown'}`,
+          sound: true,
+        });
+      } catch (error) {
+        this.logger.error('Failed to send blacklisted avatar author desktop notification', { error });
+      }
+    }
+
+    // Audio alert (always play for blacklisted authors - high severity)
+    if (this.config.audio.enabled && this.audioService.isAvailable()) {
+      try {
+        await this.audioService.playAlert();
+      } catch (error) {
+        this.logger.error('Failed to play audio alert for blacklisted avatar author', { error });
+      }
+    }
+
+    // Discord notification
+    if (this.discordService) {
+      try {
+        const fields: Array<{ name: string; value: string; inline: boolean }> = [
+          {
+            name: 'User Wearing Avatar',
+            value: `**${displayName}**\n${userId}`,
+            inline: false,
+          },
+          {
+            name: 'Avatar Details',
+            value: `**Name:** ${avatarData.avatarName}\n**Author:** ${avatarData.authorName} (${avatarData.authorId})${avatarData.performanceRating ? `\n**Rating:** ${avatarData.performanceRating}` : ''}`,
+            inline: false,
+          },
+          {
+            name: 'Blacklist Reason',
+            value: authorMatch.reason || 'No reason provided',
+            inline: false,
+          },
+        ];
+
+        if (authorMatch.severity) {
+          fields.push({
+            name: 'Severity',
+            value: authorMatch.severity.toUpperCase(),
+            inline: true,
+          });
+        }
+
+        await this.discordService.sendEmbed({
+          title: `🚨 Avatar by Blacklisted Creator Detected`,
+          description: `User **${displayName}** is wearing an avatar created by blacklisted user **${avatarData.authorName}**`,
+          color: 0xFF0000, // Red for blacklisted authors
+          fields,
+        });
+      } catch (error) {
+        this.logger.error('Failed to send blacklisted avatar author Discord notification', { error });
+      }
+    }
+
+    // VRCX notification
+    if (this.vrcxService) {
+      try {
+        await this.vrcxService.sendNotification(
+          `🚨 Avatar by Blacklisted Creator`,
+          `${displayName} is wearing avatar by ${avatarData.authorName} (${authorMatch.reason || 'Blacklisted'})`
+        );
+      } catch (error) {
+        this.logger.error('Failed to send blacklisted avatar author VRCX notification', { error });
+      }
     }
   }
 
