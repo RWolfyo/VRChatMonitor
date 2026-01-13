@@ -454,6 +454,68 @@ export class CommandHandler {
       },
     });
 
+    // Scan all avatars command
+    this.registerCommand({
+      name: 'scan-all',
+      aliases: ['scanall', 'scan-avatars'],
+      description: 'Scan all players currently in the instance for avatar performance issues',
+      handler: async () => {
+        console.log();
+        console.log(chalk.white.bold('🔍 Scanning All Current Players...'));
+        console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
+        console.log();
+
+        const startTime = Date.now();
+        const summary = await this.monitor.scanAllAvatars();
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+        console.log(chalk.white.bold('Scan Results:'));
+        console.log();
+        console.log(`  Total Players:  ${chalk.cyan(summary.total)}`);
+        console.log(`  Scanned:        ${chalk.cyan(summary.scanned)}`);
+        console.log(`  ✓ Passed:       ${chalk.green(summary.passed)}`);
+        console.log(`  ✗ Failed:       ${chalk.red(summary.failed)}`);
+        console.log(`  ⊘ Skipped:      ${chalk.yellow(summary.skipped)}`);
+        console.log(`  Time:           ${chalk.gray(duration + 's')}`);
+        console.log();
+
+        if (summary.results.length > 0) {
+          console.log(chalk.white.bold('Detailed Results:'));
+          console.log(chalk.gray('─'.repeat(CONSOLE_SEPARATOR_WIDTH)));
+
+          for (const result of summary.results) {
+            let statusIcon: string;
+            let statusColor: (text: string) => string;
+
+            if (result.status === 'passed') {
+              statusIcon = '✓';
+              statusColor = chalk.green;
+            } else if (result.status === 'failed') {
+              statusIcon = '✗';
+              statusColor = chalk.red;
+            } else if (result.status === 'skipped') {
+              statusIcon = '⊘';
+              statusColor = chalk.yellow;
+            } else {
+              statusIcon = '?';
+              statusColor = chalk.gray;
+            }
+
+            const statusText = statusColor(`${statusIcon} ${result.status.toUpperCase()}`);
+            const violations = result.violations ? ` (${result.violations} violations)` : '';
+            const error = result.error ? ` - ${result.error}` : '';
+
+            console.log(`  ${statusText.padEnd(20)} ${chalk.white(result.displayName)}${violations}${error}`);
+          }
+
+          console.log();
+        }
+
+        console.log(chalk.gray('═'.repeat(CONSOLE_SEPARATOR_WIDTH)));
+        console.log();
+      },
+    });
+
     // Quit command
     this.registerCommand({
       name: 'quit',

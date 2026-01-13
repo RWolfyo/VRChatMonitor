@@ -11,7 +11,7 @@ import { AutoUpdateService } from '../services/AutoUpdateService';
 import { AvatarScannerService, AvatarData, AvatarViolation } from '../services/AvatarScannerService';
 import { LogWatcher } from './LogWatcher';
 import { BlocklistManager } from './BlocklistManager';
-import { PlayerJoinEvent } from '../types/events';
+import { PlayerJoinEvent, PlayerLeaveEvent } from '../types/events';
 import { MatchResult } from '../types/blocklist';
 import { DEDUPE_CLEANUP_MULTIPLIER, DEDUPE_MAP_MAX_SIZE, SECONDS_TO_MS } from '../constants';
 import {
@@ -39,6 +39,7 @@ export class VRChatMonitor extends EventEmitter {
 
   private isRunning: boolean = false;
   private recentJoins: Map<string, number> = new Map(); // userId -> timestamp
+  private currentPlayers: Map<string, { userId: string; displayName: string; joinedAt: number }> = new Map(); // userId -> player info
   private readonly DEDUPE_WINDOW_MS: number;
 
   constructor(configPath?: string) {
@@ -294,6 +295,11 @@ export class VRChatMonitor extends EventEmitter {
       this.handlePlayerJoin(event);
     });
 
+    // Listen for player leave events
+    this.logWatcher.on('playerLeave', (event: PlayerLeaveEvent) => {
+      this.handlePlayerLeave(event);
+    });
+
     // Listen for errors
     this.logWatcher.on('error', (error: Error) => {
       this.logger.error('LogWatcher error', { error });
@@ -323,6 +329,13 @@ export class VRChatMonitor extends EventEmitter {
 
     this.recentJoins.set(userId, Date.now());
     this.cleanupOldJoins();
+
+    // Track current players
+    this.currentPlayers.set(userId, {
+      userId,
+      displayName,
+      joinedAt: Date.now(),
+    });
 
     this.logger.info(`Player joined: ${displayName} (${userId})`);
 
@@ -371,6 +384,18 @@ export class VRChatMonitor extends EventEmitter {
         await this.checkAvatarPerformance(userId, displayName);
       }
     }
+  }
+
+  /**
+   * Handle player leave event
+   */
+  private handlePlayerLeave(event: PlayerLeaveEvent): void {
+    const { userId, displayName } = event;
+
+    // Remove player from current players tracking
+    this.currentPlayers.delete(userId);
+
+    this.logger.info(`Player left: ${displayName} (${userId})`);
   }
 
   /**
@@ -961,6 +986,106 @@ export class VRChatMonitor extends EventEmitter {
     if (deletedCount > 0) {
       this.logger.debug(`Cleaned up ${deletedCount} old join records (${this.recentJoins.size} remaining)`);
     }
+  }
+
+  /**
+   * Get list of current players in instance
+   */
+  public getCurrentPlayers(): Array<{ userId: string; displayName: string; joinedAt: number }> {
+    return Array.from(this.currentPlayers.values());
+  }
+
+  /**
+   * Scan all current players' avatars for performance issues
+   * Returns a summary of results
+   */
+  public async scanAllAvatars(): Promise<{
+    total: number;
+    scanned: number;
+    passed: number;
+    failed: number;
+    skipped: number;
+    results: Array<{
+      userId: string;
+      displayName: string;
+      status: 'passed' | 'failed' | 'skipped' | 'error';
+      violations?: number;
+      error?: string;
+    }>;
+  }> {
+    const players = this.getCurrentPlayers();
+    const results: Array<{
+      userId: string;
+      displayName: string;
+      status: 'passed' | 'failed' | 'skipped' | 'error';
+      violations?: number;
+      error?: string;
+    }> = [];
+
+    let passed = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    for (const player of players) {
+      const { userId, displayName } = player;
+
+      // Skip if avatar scanning is disabled
+      if (!this.config.advanced.avatarScanning?.enabled || !this.avatarScanner) {
+        results.push({ userId, displayName, status: 'skipped' });
+        skipped++;
+        continue;
+      }
+
+      // TODO: Skip friends if configured (need to implement isFriend method in VRChatAPIService)
+
+      try {
+        // Get avatar data
+        const avatarData = await this.avatarScanner.getAvatarForUser(userId, displayName);
+        if (!avatarData) {
+          results.push({ userId, displayName, status: 'skipped' });
+          skipped++;
+          continue;
+        }
+
+        // Check avatar author blacklist
+        const authorBlacklisted = await this.checkAvatarAuthorBlacklist(avatarData, displayName, userId);
+
+        // Check thresholds
+        const violations = this.avatarScanner.checkAvatarThresholds(
+          avatarData,
+          this.config.advanced.avatarScanning.thresholds
+        );
+
+        if (violations.length > 0 || authorBlacklisted) {
+          results.push({
+            userId,
+            displayName,
+            status: 'failed',
+            violations: violations.length,
+          });
+          failed++;
+        } else {
+          results.push({ userId, displayName, status: 'passed' });
+          passed++;
+        }
+      } catch (error: any) {
+        results.push({
+          userId,
+          displayName,
+          status: 'error',
+          error: error.message || 'Unknown error',
+        });
+      }
+    }
+
+    return {
+      total: players.length,
+      scanned: passed + failed,
+      passed,
+      failed,
+      skipped,
+      results,
+    };
   }
 
   /**
