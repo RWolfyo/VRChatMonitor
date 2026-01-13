@@ -11,7 +11,7 @@ import { AutoUpdateService } from '../services/AutoUpdateService';
 import { AvatarScannerService, AvatarData, AvatarViolation } from '../services/AvatarScannerService';
 import { LogWatcher } from './LogWatcher';
 import { BlocklistManager } from './BlocklistManager';
-import { PlayerJoinEvent, PlayerLeaveEvent } from '../types/events';
+import { PlayerJoinEvent, PlayerLeaveEvent, AvatarChangeEvent } from '../types/events';
 import { MatchResult } from '../types/blocklist';
 import { DEDUPE_CLEANUP_MULTIPLIER, DEDUPE_MAP_MAX_SIZE, SECONDS_TO_MS } from '../constants';
 import {
@@ -300,6 +300,11 @@ export class VRChatMonitor extends EventEmitter {
       this.handlePlayerLeave(event);
     });
 
+    // Listen for avatar change events
+    this.logWatcher.on('avatarChange', (event: AvatarChangeEvent) => {
+      this.handleAvatarChange(event);
+    });
+
     // Listen for errors
     this.logWatcher.on('error', (error: Error) => {
       this.logger.error('LogWatcher error', { error });
@@ -396,6 +401,41 @@ export class VRChatMonitor extends EventEmitter {
     this.currentPlayers.delete(userId);
 
     this.logger.info(`Player left: ${displayName} (${userId})`);
+  }
+
+  /**
+   * Handle avatar change event
+   */
+  private async handleAvatarChange(event: AvatarChangeEvent): Promise<void> {
+    const { displayName, avatarName } = event;
+
+    // Find the player by display name in current players
+    const player = Array.from(this.currentPlayers.values()).find((p) => p.displayName === displayName);
+
+    if (!player) {
+      this.logger.debug(`Avatar change detected for unknown player: ${displayName}`);
+      return;
+    }
+
+    const { userId } = player;
+
+    // Skip if it's the current user
+    if (this.vrchatAPI?.isCurrentUser(userId)) {
+      this.logger.debug(`Ignoring avatar change for current user: ${displayName}`);
+      return;
+    }
+
+    this.logger.info(`Avatar changed: ${displayName} (${userId}) -> ${avatarName}`);
+
+    // Check avatar performance if enabled and scanOnChange is true
+    if (
+      this.vrchatAPI &&
+      this.avatarScanner &&
+      this.config.advanced.avatarScanning?.enabled &&
+      this.config.advanced.avatarScanning.scanOnChange
+    ) {
+      await this.checkAvatarPerformance(userId, displayName);
+    }
   }
 
   /**

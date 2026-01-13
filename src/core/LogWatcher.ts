@@ -36,7 +36,7 @@ import { FSWatcher, watch } from 'chokidar';
 import { EventEmitter } from 'events';
 import { Logger } from '../utils/Logger';
 import { PathResolver } from '../utils/PathResolver';
-import { PlayerJoinEvent, PlayerLeaveEvent } from '../types/events';
+import { PlayerJoinEvent, PlayerLeaveEvent, AvatarChangeEvent } from '../types/events';
 import {
   LOG_ROTATION_CHECK_INTERVAL_MS,
   LOG_ROTATION_CHECK_INTERVAL_SECONDS,
@@ -74,6 +74,9 @@ export class LogWatcher extends EventEmitter {
 
   /** Regex pattern for player leave events in VRChat logs */
   private readonly LEAVE_PATTERN = /\[Behaviour\] OnPlayerLeft (.+) \(([^)]+)\)/;
+
+  /** Regex pattern for avatar change events in VRChat logs */
+  private readonly AVATAR_CHANGE_PATTERN = /\[Behaviour\] Switching (.+) to avatar (.+)/;
 
   /**
    * Initialize the Log Watcher.
@@ -344,6 +347,13 @@ export class LogWatcher extends EventEmitter {
         this.handlePlayerLeave(userId, displayName);
         return;
       }
+
+      const avatarChangeMatch = line.match(this.AVATAR_CHANGE_PATTERN);
+      if (avatarChangeMatch) {
+        const [, displayName, avatarName] = avatarChangeMatch;
+        this.handleAvatarChange(displayName, avatarName);
+        return;
+      }
     } catch (error) {
       this.logger.debug('Error processing log line', { error, line });
     }
@@ -389,6 +399,28 @@ export class LogWatcher extends EventEmitter {
     };
 
     this.emit('playerLeave', event);
+  }
+
+  /**
+   * Handle avatar change event and emit to monitoring system.
+   *
+   * Creates AvatarChangeEvent object and emits 'avatarChange' event for
+   * downstream processing. Note: VRChat logs only include display name,
+   * not user ID for avatar changes.
+   *
+   * @param displayName - Player's display name
+   * @param avatarName - Name of the new avatar
+   */
+  private handleAvatarChange(displayName: string, avatarName: string): void {
+    this.logger.debug(`Avatar changed: ${displayName} -> ${avatarName}`);
+
+    const event: AvatarChangeEvent = {
+      displayName,
+      avatarName,
+      timestamp: new Date(),
+    };
+
+    this.emit('avatarChange', event);
   }
 
   /**

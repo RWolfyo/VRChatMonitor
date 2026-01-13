@@ -10,6 +10,12 @@ export interface PlayerLeaveEvent {
   timestamp: Date;
 }
 
+export interface AvatarChangeEvent {
+  displayName: string;
+  avatarName: string;
+  timestamp: Date;
+}
+
 export interface BlocklistUpdatedEvent {
   timestamp: Date;
   entriesCount: number;
